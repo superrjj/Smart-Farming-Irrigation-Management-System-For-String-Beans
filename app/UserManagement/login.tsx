@@ -1,15 +1,19 @@
 import { FontAwesome } from '@expo/vector-icons';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
+  Alert,
   Image,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '@/lib/supabase';
 
 const colors = {
   brandGreen: '#3E9B4F',
@@ -26,6 +30,47 @@ const fonts = {
 };
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: userProfile, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('email', email.trim())
+        .eq('password', password) // assumes password column; consider hashing in production
+        .maybeSingle();
+
+      if (error) {
+        Alert.alert('Login Failed', error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!userProfile) {
+        Alert.alert('Login Failed', 'Invalid credentials');
+        setLoading(false);
+        return;
+      }
+
+      // Navigate to main app
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'An unexpected error occurred');
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -33,15 +78,6 @@ export default function LoginScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         <View style={styles.phoneFrame}>
-          <View style={styles.statusBar}>
-            <Text style={styles.statusTime}>10:09 AM</Text>
-            <View style={styles.statusIcons}>
-              <FontAwesome name="signal" size={14} color={colors.brandGrayText} />
-              <FontAwesome name="wifi" size={14} color={colors.brandGrayText} />
-              <FontAwesome name="battery-full" size={16} color={colors.brandGrayText} />
-            </View>
-          </View>
-
           <View style={styles.content}>
             <View style={styles.header}>
               <Image
@@ -63,6 +99,10 @@ export default function LoginScreen() {
                   placeholderTextColor={colors.brandGrayText}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  value={email}
+                  onChangeText={setEmail}
+                  editable={!loading}
                   style={styles.input}
                 />
               </View>
@@ -72,17 +112,38 @@ export default function LoginScreen() {
                 <TextInput
                   placeholder="Password"
                   placeholderTextColor={colors.brandGrayText}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  editable={!loading}
                   style={styles.input}
                 />
+                <TouchableOpacity
+                  style={styles.togglePasswordButton}
+                  activeOpacity={0.7}
+                  onPress={() => setShowPassword((prev) => !prev)}>
+                  <FontAwesome
+                    name={showPassword ? 'eye-slash' : 'eye'}
+                    size={18}
+                    color={colors.brandGrayText}
+                  />
+                </TouchableOpacity>
               </View>
 
               <TouchableOpacity style={styles.forgotWrapper} activeOpacity={0.7}>
                 <Text style={styles.forgotText}>Forgot password?</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.loginButton} activeOpacity={0.9}>
-                <Text style={styles.loginButtonText}>Log In</Text>
+              <TouchableOpacity
+                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                activeOpacity={0.9}
+                onPress={handleLogin}
+                disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.loginButtonText}>Log In</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -90,7 +151,7 @@ export default function LoginScreen() {
           <View style={styles.footer}>
             <Text style={styles.footerText}>
               Don&apos;t have an account?{' '}
-              <Link href="/" asChild>
+              <Link href="/UserManagement/signup" asChild>
                 <TouchableOpacity activeOpacity={0.7}>
                   <Text style={styles.footerLink}>Sign Up</Text>
                 </TouchableOpacity>
@@ -117,29 +178,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     backgroundColor: '#fff',
   },
-  statusBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    alignItems: 'center',
-  },
-  statusTime: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: '#1C1C1E',
-  },
-  statusIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   content: {
     flex: 1,
     paddingHorizontal: 28,
-    paddingVertical: 24,
-    justifyContent: 'space-between',
-    gap: 16,
+    paddingVertical: 16,
+    justifyContent: 'center',
+    gap: 24,
   },
   header: {
     alignItems: 'center',
@@ -175,6 +219,11 @@ const styles = StyleSheet.create({
     left: 16,
     zIndex: 1,
   },
+  togglePasswordButton: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 1,
+  },
   input: {
     height: 52,
     borderRadius: 12,
@@ -200,6 +249,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     marginTop: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 52,
+  },
+  loginButtonDisabled: {
+    opacity: 0.6,
   },
   loginButtonText: {
     fontFamily: fonts.semibold,
@@ -213,12 +268,12 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontFamily: fonts.regular,
-    fontSize: 13,
+    fontSize: 15,
     color: colors.brandGrayText,
   },
   footerLink: {
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 14,
     color: colors.brandBlue,
   },
 });

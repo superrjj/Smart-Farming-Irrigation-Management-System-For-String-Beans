@@ -1,0 +1,311 @@
+import { FontAwesome } from '@expo/vector-icons';
+import { Link, useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '@/lib/supabase';
+
+const colors = {
+  brandGreen: '#3E9B4F',
+  brandBlue: '#007AFF',
+  brandGrayText: '#8A8A8E',
+  brandGrayBorder: '#D1D1D6',
+};
+
+const fonts = {
+  regular: 'Poppins_400Regular',
+  medium: 'Poppins_500Medium',
+  semibold: 'Poppins_600SemiBold',
+  bold: 'Poppins_700Bold',
+};
+
+const generateUUID = () => {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+  // fallback v4 uuid
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+export default function SignupScreen() {
+  const router = useRouter();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSignup = async () => {
+    if (!name || !email || !phone || !password || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const newId = generateUUID();
+
+      const { error: profileError } = await supabase.from('user_profiles').insert({
+        id: newId,
+        name,
+        email: email.trim(),
+        phone_number: phone,
+        password, // assumes a password column exists; consider hashing in production
+      });
+
+      if (profileError) {
+        Alert.alert('Sign Up Failed', profileError.message);
+        setLoading(false);
+        return;
+      }
+
+      Alert.alert('Success', 'Account created successfully. You can now log in.', [
+        {
+          text: 'OK',
+          onPress: () => router.replace('/UserManagement/login'),
+        },
+      ]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView
+        bounces={false}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.phoneFrame}>
+          <View style={styles.content}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.subtitle}>Register as Farmer</Text>
+            </View>
+
+            <View style={styles.form}>
+              <View style={styles.inputWrapper}>
+                <FontAwesome name="user" size={16} color={colors.brandGrayText} style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Full name"
+                  placeholderTextColor={colors.brandGrayText}
+                  autoCapitalize="words"
+                  value={name}
+                  onChangeText={setName}
+                  editable={!loading}
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <FontAwesome name="envelope" size={16} color={colors.brandGrayText} style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Email address"
+                  placeholderTextColor={colors.brandGrayText}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={email}
+                  onChangeText={setEmail}
+                  editable={!loading}
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <FontAwesome name="phone" size={18} color={colors.brandGrayText} style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Phone number"
+                  placeholderTextColor={colors.brandGrayText}
+                  keyboardType="phone-pad"
+                  value={phone}
+                  onChangeText={setPhone}
+                  editable={!loading}
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <FontAwesome name="lock" size={18} color={colors.brandGrayText} style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Password"
+                  placeholderTextColor={colors.brandGrayText}
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                  editable={!loading}
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <FontAwesome name="lock" size={18} color={colors.brandGrayText} style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Confirm password"
+                  placeholderTextColor={colors.brandGrayText}
+                  secureTextEntry
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  editable={!loading}
+                  style={styles.input}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.signupButton, loading && styles.signupButtonDisabled]}
+                activeOpacity={0.9}
+                onPress={handleSignup}
+                disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.signupButtonText}>Sign Up</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Already have an account?{' '}
+              <Link href="/UserManagement/login" asChild>
+                <TouchableOpacity activeOpacity={0.7}>
+                  <Text style={styles.footerLink}>Log In</Text>
+                </TouchableOpacity>
+              </Link>
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  phoneFrame: {
+    flex: 1,
+    maxWidth: 420,
+    alignSelf: 'center',
+    backgroundColor: '#fff',
+    width: '100%',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+    justifyContent: 'center',
+    gap: 24,
+    width: '100%',
+    alignItems: 'stretch',
+  },
+  header: {
+    gap: 4,
+    alignItems: 'center',
+  },
+  title: {
+    fontFamily: fonts.semibold,
+    fontSize: 28,
+    color: '#000',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    color: colors.brandGrayText,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  form: {
+    gap: 14,
+    marginTop: 12,
+    width: '100%',
+    alignItems: 'stretch',
+  },
+  inputWrapper: {
+    position: 'relative',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  inputIcon: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 1,
+  },
+  input: {
+    height: 52,
+    width: '100%',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.brandGrayBorder,
+    paddingLeft: 48,
+    paddingRight: 16,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    color: '#000',
+  },
+  signupButton: {
+    backgroundColor: colors.brandGreen,
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginTop: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 52,
+    width: '100%',
+    minWidth: '100%',
+    alignSelf: 'stretch',
+  },
+  signupButtonDisabled: {
+    opacity: 0.6,
+  },
+  signupButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 18,
+    color: '#fff',
+    textAlign: 'center',
+  },
+  footer: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: colors.brandGrayText,
+  },
+  footerLink: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.brandBlue,
+  },
+});
+
+
