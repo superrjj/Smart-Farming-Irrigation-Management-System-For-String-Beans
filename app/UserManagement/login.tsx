@@ -63,8 +63,11 @@ export default function LoginScreen() {
         return;
       }
 
-      // Navigate to main app
-      router.replace('/(tabs)');
+      // Navigate to dashboard, pass email so we can fetch full name
+      router.replace({
+        pathname: '/UserManagement/dashboard',
+        params: { email: email.trim() },
+      });
     } catch (error: any) {
       Alert.alert('Error', error.message || 'An unexpected error occurred');
       setLoading(false);
@@ -73,10 +76,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        bounces={false}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+      <ScrollView bounces={false} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.phoneFrame}>
           <View style={styles.content}>
             <View style={styles.header}>
@@ -139,27 +139,28 @@ export default function LoginScreen() {
                 activeOpacity={0.9}
                 onPress={handleLogin}
                 disabled={loading}>
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.loginButtonText}>Log In</Text>
-                )}
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginButtonText}>Log In</Text>}
               </TouchableOpacity>
-            </View>
-          </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Don&apos;t have an account?{' '}
-              <Link href="/UserManagement/signup" asChild>
-                <TouchableOpacity activeOpacity={0.7}>
-                  <Text style={styles.footerLink}>Sign Up</Text>
-                </TouchableOpacity>
-              </Link>
-            </Text>
+              <View style={styles.inlineFooter}>
+                <Text style={styles.inlineFooterText}>Don&apos;t have an account?</Text>
+                <Link href="/UserManagement/signup" asChild>
+                  <TouchableOpacity activeOpacity={0.7}>
+                    <Text style={styles.inlineFooterLink}>Sign Up</Text>
+                  </TouchableOpacity>
+                </Link>
+              </View>
+            </View>
           </View>
         </View>
       </ScrollView>
+
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loadingText}>Signing in...</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -241,7 +242,7 @@ const styles = StyleSheet.create({
   },
   forgotText: {
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 15,
     color: colors.brandBlue,
   },
   loginButton: {
@@ -262,19 +263,38 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
   },
-  footer: {
-    paddingVertical: 24,
+  inlineFooter: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
   },
-  footerText: {
+  inlineFooterText: {
     fontFamily: fonts.regular,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.brandGrayText,
   },
-  footerLink: {
+  inlineFooterLink: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.brandBlue,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 8,
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    color: '#fff',
   },
 });
 

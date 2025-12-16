@@ -17,8 +17,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export const unstable_settings = {
-  // This will be handled by index.tsx redirect
-  initialRouteName: '(tabs)',
+  // Start app at index, which redirects into UserManagement/login
+  initialRouteName: 'index',
 };
 
 export default function RootLayout() {
@@ -44,11 +44,10 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="UserManagement" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" backgroundColor="#ffffff" />
     </ThemeProvider>
   );
 }

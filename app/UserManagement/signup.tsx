@@ -177,24 +177,18 @@ export default function SignupScreen() {
                 activeOpacity={0.9}
                 onPress={handleSignup}
                 disabled={loading}>
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.signupButtonText}>Sign Up</Text>
-                )}
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.signupButtonText}>Sign Up</Text>}
               </TouchableOpacity>
-            </View>
-          </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Already have an account?{' '}
-              <Link href="/UserManagement/login" asChild>
-                <TouchableOpacity activeOpacity={0.7}>
-                  <Text style={styles.footerLink}>Log In</Text>
-                </TouchableOpacity>
-              </Link>
-            </Text>
+              <View style={styles.inlineFooter}>
+                <Text style={styles.inlineFooterText}>Already have an account?</Text>
+                <Link href="/UserManagement/login" asChild>
+                  <TouchableOpacity activeOpacity={0.7}>
+                    <Text style={styles.inlineFooterLink}>Log In</Text>
+                  </TouchableOpacity>
+                </Link>
+              </View>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -292,18 +286,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
   },
-  footer: {
-    marginTop: 24,
+  inlineFooter: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
   },
-  footerText: {
+  inlineFooterText: {
     fontFamily: fonts.regular,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.brandGrayText,
   },
-  footerLink: {
+  inlineFooterLink: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.brandBlue,
   },
 });
