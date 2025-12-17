@@ -15,14 +15,18 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 
 import { supabase } from '@/lib/supabase';
 
 const colors = {
-  brandGreen: '#3E9B4F',
-  brandBlue: '#007AFF',
-  brandGrayText: '#8A8A8E',
-  brandGrayBorder: '#D1D1D6',
+  brandGreen: '#22C55E',
+  brandBlue: '#3B82F6',
+  brandGrayText: '#6B7280',
+  brandGrayBorder: '#E5E7EB',
+  cardBg: '#F9FAFB',
+  orange: '#F97316',
+  purple: '#A855F7',
 };
 
 const fonts = {
@@ -48,13 +52,131 @@ const ANALYTICS_SUB_ITEMS = [
 
 const DRAWER_WIDTH = Math.min(320, Dimensions.get('window').width * 0.8);
 
+// Circular Gauge Component
+interface GaugeProps {
+  value: number;
+  maxValue: number;
+  size?: number;
+  strokeWidth?: number;
+  gradientColors: string[];
+  label: string;
+  subLabel: string;
+  unit?: string;
+  icon?: React.ReactNode;
+}
+
+function CircularGauge({
+  value,
+  maxValue,
+  size = 90,
+  strokeWidth = 8,
+  gradientColors,
+  label,
+  subLabel,
+  unit = '%',
+  icon,
+}: GaugeProps) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.min(value / maxValue, 1);
+  const strokeDashoffset = circumference * (1 - progress * 0.75); // 75% of circle (270 degrees)
+
+  return (
+    <View style={gaugeStyles.container}>
+      <View style={{ width: size, height: size }}>
+        <Svg width={size} height={size}>
+          <Defs>
+            <SvgLinearGradient id={`grad-${label}`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <Stop offset="0%" stopColor={gradientColors[0]} />
+              <Stop offset="100%" stopColor={gradientColors[1]} />
+            </SvgLinearGradient>
+          </Defs>
+          {/* Background circle */}
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="#E5E7EB"
+            strokeWidth={strokeWidth}
+            fill="transparent"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * 0.25}
+            rotation={135}
+            origin={`${size / 2}, ${size / 2}`}
+            strokeLinecap="round"
+          />
+          {/* Progress circle */}
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={`url(#grad-${label})`}
+            strokeWidth={strokeWidth}
+            fill="transparent"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            rotation={135}
+            origin={`${size / 2}, ${size / 2}`}
+            strokeLinecap="round"
+          />
+        </Svg>
+        <View style={gaugeStyles.centerContent}>
+          {icon}
+          <Text style={gaugeStyles.valueText}>
+            {value}
+            {unit}
+          </Text>
+        </View>
+      </View>
+      <Text style={gaugeStyles.label}>{label}</Text>
+      <Text style={gaugeStyles.subLabel}>{subLabel}</Text>
+    </View>
+  );
+}
+
+const gaugeStyles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  centerContent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  valueText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  label: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: '#1F2937',
+    marginTop: 4,
+  },
+  subLabel: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.brandGrayText,
+  },
+});
+
 export default function DashboardScreen() {
   const params = useLocalSearchParams<{ email?: string }>();
   const email = typeof params.email === 'string' ? params.email : '';
   const router = useRouter();
 
-  // TODO: replace this mock value with real soil moisture percentage from Supabase/sensors
-  const soilMoisturePercent = 80;
+  // Mock sensor data - replace with real data from Supabase/sensors later
+  const soilMoisturePercent = 65;
+  const temperatureValue = 24;
+  const humidityPercent = 48;
+  const systemActive = true;
+  const nextSchedule = 'Today, 6:00 PM';
 
   const [fullName, setFullName] = useState<string>('Farmer');
   const [loadingName, setLoadingName] = useState<boolean>(true);
@@ -156,45 +278,91 @@ export default function DashboardScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <Text style={styles.sectionTitle}>Dashboard</Text>
 
-          {/* Circular gauge placeholder */}
-          <View style={styles.gaugeCard}>
-            <View style={styles.gaugeOuter}>
-              <View style={styles.gaugeInner}>
-                <Text style={styles.gaugeValue}>{soilMoisturePercent}%</Text>
-                <Text style={styles.gaugeLabel}>Soil Moisture</Text>
+          {/* System Status Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>System Status</Text>
+            <View style={styles.statusRow}>
+              <View style={styles.statusLeft}>
+                <View style={[styles.statusIcon, systemActive && styles.statusIconActive]}>
+                  <FontAwesome name="check" size={20} color="#fff" />
+                </View>
+                <Text style={styles.statusText}>
+                  {systemActive ? 'Active & Watering' : 'Inactive'}
+                </Text>
               </View>
+            </View>
+            <View style={styles.scheduleRow}>
+              <View>
+                <Text style={styles.scheduleLabel}>Next scheduled cycle:</Text>
+                <Text style={styles.scheduleTime}>{nextSchedule}</Text>
+              </View>
+              <TouchableOpacity style={styles.pauseButton}>
+                <Text style={styles.pauseButtonText}>Pause System</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Simple charts placeholders */}
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Irrigation Trends</Text>
-            <View style={styles.barRow}>
-              {[60, 40, 70, 50, 80].map((h, idx) => (
-                <View key={idx} style={[styles.bar, { height: 40 + h / 2 }]} />
-              ))}
+          {/* Environmental Conditions Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Environmental Conditions</Text>
+            <View style={styles.gaugesRow}>
+              <CircularGauge
+                value={soilMoisturePercent}
+                maxValue={100}
+                gradientColors={['#60A5FA', '#3B82F6']}
+                label="Soil Moisture"
+                subLabel="Optimal"
+                icon={<FontAwesome name="tint" size={14} color="#3B82F6" style={{ marginBottom: 2 }} />}
+              />
+              <CircularGauge
+                value={temperatureValue}
+                maxValue={50}
+                gradientColors={['#FBBF24', '#F97316']}
+                label="Temperature"
+                subLabel="Mild"
+                unit="°C"
+                icon={<FontAwesome name="thermometer" size={14} color="#F97316" style={{ marginBottom: 2 }} />}
+              />
+              <CircularGauge
+                value={humidityPercent}
+                maxValue={100}
+                gradientColors={['#C084FC', '#A855F7']}
+                label="Humidity"
+                subLabel="Comfortable"
+                icon={<FontAwesome name="cloud" size={14} color="#A855F7" style={{ marginBottom: 2 }} />}
+              />
             </View>
           </View>
 
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Sensor Summary</Text>
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Temp</Text>
-                <Text style={styles.summaryValue}>26°C</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Humidity</Text>
-                <Text style={styles.summaryValue}>65%</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Water Flow</Text>
-                <Text style={styles.summaryValue}>1.2 L/min</Text>
-              </View>
+          {/* Quick Controls Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Quick Controls</Text>
+            <View style={styles.controlsRow}>
+              <TouchableOpacity style={styles.controlButton}>
+                <View style={styles.controlIconCircle}>
+                  <FontAwesome name="tint" size={20} color="#6B7280" />
+                </View>
+                <Text style={styles.controlLabel}>Manual</Text>
+                <Text style={styles.controlLabel}>Water</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.controlButton}>
+                <View style={styles.controlIconCircle}>
+                  <FontAwesome name="cloud" size={20} color="#6B7280" />
+                </View>
+                <Text style={styles.controlLabel}>Rain Delay</Text>
+                <Text style={styles.controlLabel}>(24h)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.controlButton}>
+                <View style={styles.controlIconCircle}>
+                  <FontAwesome name="th-large" size={20} color="#6B7280" />
+                </View>
+                <Text style={styles.controlLabel}>View All</Text>
+                <Text style={styles.controlLabel}>Zones</Text>
+              </TouchableOpacity>
             </View>
           </View>
+
         </ScrollView>
 
         {/* Backdrop for drawer */}
@@ -242,6 +410,18 @@ export default function DashboardScreen() {
                       setMenuOpen(false);
                       router.push({
                         pathname: '/UserManagement/weatherUpdate',
+                        params: { email },
+                      });
+                    } else if (item.key === 'water') {
+                      setMenuOpen(false);
+                      router.push({
+                        pathname: '/UserManagement/waterDistribution',
+                        params: { email },
+                      });
+                    } else if (item.key === 'schedule') {
+                      setMenuOpen(false);
+                      router.push({
+                        pathname: '/UserManagement/irrigationSchedule',
                         params: { email },
                       });
                     }
@@ -302,7 +482,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F3F4F6',
   },
   container: {
     flex: 1,
@@ -313,6 +493,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    backgroundColor: '#fff',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.brandGrayBorder,
   },
@@ -333,89 +514,112 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    padding: 16,
+    gap: 16,
   },
-  sectionTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 20,
-    marginBottom: 12,
-    color: '#000',
-  },
-  gaugeCard: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  gaugeOuter: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    borderWidth: 14,
-    borderColor: colors.brandBlue,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F9FF',
-  },
-  gaugeInner: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+  card: {
     backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  cardTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  // System Status
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  statusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statusIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#9CA3AF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  gaugeValue: {
-    fontFamily: fonts.bold,
-    fontSize: 32,
-    color: colors.brandBlue,
-  },
-  gaugeLabel: {
-    marginTop: 4,
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: colors.brandGrayText,
-  },
-  chartCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.brandGrayBorder,
-    padding: 14,
-    marginBottom: 16,
-  },
-  chartTitle: {
-    fontFamily: fonts.medium,
-    fontSize: 15,
-    marginBottom: 10,
-    color: '#000',
-  },
-  barRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  bar: {
-    width: 20,
-    borderRadius: 6,
+  statusIconActive: {
     backgroundColor: colors.brandGreen,
   },
-  summaryRow: {
+  statusText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  scheduleRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
-  summaryItem: {
-    flex: 1,
-    paddingVertical: 8,
-  },
-  summaryLabel: {
+  scheduleLabel: {
     fontFamily: fonts.regular,
     fontSize: 12,
     color: colors.brandGrayText,
-    marginBottom: 2,
   },
-  summaryValue: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: '#000',
+  scheduleTime: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: '#1F2937',
+  },
+  pauseButton: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.brandGrayBorder,
+  },
+  pauseButtonText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: '#1F2937',
+  },
+  // Gauges
+  gaugesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+    paddingVertical: 8,
+  },
+  // Quick Controls
+  controlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 8,
+  },
+  controlButton: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  controlIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  controlLabel: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: '#1F2937',
+    textAlign: 'center',
   },
   userHeader: {
     flexDirection: 'row',

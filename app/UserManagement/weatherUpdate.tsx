@@ -1,7 +1,13 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const colors = {
@@ -21,10 +27,10 @@ const fonts = {
 };
 
 const FORECAST = [
-  { day: 'Today', temp: '28°', icon: 'cloud' },
+  { day: 'Today', temp: '28°', icon: 'sun-o' },
   { day: 'Tue', temp: '29°', icon: 'cloud' },
-  { day: 'Wed', temp: '30°', icon: 'cloud' },
-  { day: 'Thu', temp: '27°', icon: 'cloud' },
+  { day: 'Wed', temp: '30°', icon: 'umbrella' },
+  { day: 'Thu', temp: '27°', icon: 'sun-o' },
 ];
 
 export default function WeatherUpdateScreen() {
@@ -35,43 +41,52 @@ export default function WeatherUpdateScreen() {
       <View style={styles.container}>
         {/* Top App Bar */}
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.back()}>
             <FontAwesome name="chevron-left" size={20} color="#000" />
           </TouchableOpacity>
 
           <Text style={styles.topBarTitle}>Weather Update</Text>
+
+          <View style={styles.topBarRight}>
+            <TouchableOpacity style={styles.iconButton}>
+              <FontAwesome name="search" size={18} color="#000" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton}>
+              <FontAwesome name="bell-o" size={18} color="#000" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
+          {/* Location row */}
+          <View style={styles.locationRow}>
+            <Text style={styles.locationText}>Dalayap, Tarlac City</Text>
+            <View style={styles.locationRight}>
+              <FontAwesome name="map-marker" size={16} color={colors.brandBlue} />
+            </View>
+          </View>
+
+          {/* Main weather card */}
           <LinearGradient
             colors={[colors.brandBlueLight, colors.brandBlueDark]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.weatherWrapper}>
-            {/* Location row */}
-            <View style={styles.locationRow}>
-              <View style={styles.locationLeft}>
-                <FontAwesome name="map-marker" size={16} color="#fff" />
-                <Text style={styles.locationText}>Dalayap, Tarlac City</Text>
+            style={styles.mainCard}>
+            <View style={styles.mainTopRow}>
+              <View>
+                <Text style={styles.mainTemp}>28°</Text>
+                <Text style={styles.mainCondition}>Light Rain</Text>
+                <Text style={styles.mainDetail}>Feels like 30°</Text>
               </View>
-        
-            </View>
-
-            {/* Main temperature & icon */}
-            <View style={styles.mainCenter}>
               <View style={styles.mainIconCircle}>
-                <FontAwesome name="cloud" size={60} color="#fff" />
+                <FontAwesome name="umbrella" size={38} color="#fff" />
               </View>
-              <Text style={styles.mainTemp}>28°</Text>
-              <Text style={styles.mainCondition}>Light Rain</Text>
-              <Text style={styles.mainDetail}>Max 29° · Min 23°</Text>
             </View>
 
-            {/* Small info pills */}
-            <View style={styles.pillRow}>
+            <View style={styles.mainBottomRow}>
               <View style={styles.infoPill}>
                 <FontAwesome name="tint" size={14} color="#fff" />
                 <Text style={styles.infoPillText}>Humidity 78%</Text>
@@ -80,40 +95,38 @@ export default function WeatherUpdateScreen() {
                 <FontAwesome name="leaf" size={14} color="#fff" />
                 <Text style={styles.infoPillText}>Soil moisture 80%</Text>
               </View>
-              <View style={styles.infoPill}>
-                <FontAwesome name="flag" size={14} color="#fff" />
-                <Text style={styles.infoPillText}>Wind 8 km/h</Text>
-              </View>
             </View>
-
-            {/* Forecast header */}
-            <View style={styles.forecastHeader}>
-              <Text style={styles.forecastTitle}>Today</Text>
-              <Text style={styles.forecastSubtitle}>Next 3 days</Text>
-            </View>
-
-            {/* Horizontal forecast cards */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.forecastScroll}>
-              {FORECAST.map((f, index) => (
-                <View
-                  key={f.day}
-                  style={[
-                    styles.forecastCard,
-                    index === 0 && styles.forecastCardActive,
-                  ]}>
-                  <Text style={styles.forecastDay}>{f.day}</Text>
-                  <View style={styles.forecastIconRow}>
-                    <FontAwesome name={f.icon as any} size={22} color="#fff" />
-                  </View>
-                  <Text style={styles.forecastTemp}>{f.temp}</Text>
-                  <Text style={styles.forecastTime}>15:00</Text>
-                </View>
-              ))}
-            </ScrollView>
           </LinearGradient>
+
+          {/* Today summary */}
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Rain chance</Text>
+              <Text style={styles.summaryValue}>65%</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Wind</Text>
+              <Text style={styles.summaryValue}>8 km/h</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>UV Index</Text>
+              <Text style={styles.summaryValue}>4 (Moderate)</Text>
+            </View>
+          </View>
+
+          {/* Forecast list */}
+          <View style={styles.forecastCard}>
+            <Text style={styles.forecastTitle}>Next days</Text>
+            {FORECAST.map((f, idx) => (
+              <View key={f.day} style={[styles.forecastRow, idx !== 0 && styles.forecastRowDivider]}>
+                <Text style={styles.forecastDay}>{f.day}</Text>
+                <View style={styles.forecastRight}>
+                  <FontAwesome name={f.icon as any} size={18} color={colors.brandBlueLight} />
+                  <Text style={styles.forecastTemp}>{f.temp}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -131,17 +144,11 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.brandGrayBorder,
-  },
-  backButton: {
-    position: 'absolute',
-    left: 16,
-    paddingRight: 16,
-    paddingVertical: 4,
   },
   topBarTitle: {
     fontFamily: fonts.semibold,
@@ -160,16 +167,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  weatherWrapper: {
-    flex: 1,
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    minHeight: '100%',
+    paddingVertical: 16,
   },
   locationRow: {
     flexDirection: 'row',
@@ -177,24 +176,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  locationLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   locationText: {
     fontFamily: fonts.semibold,
     fontSize: 18,
-    color: '#fff',
+    color: '#000',
   },
-  locationSubText: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: '#E5E7EB',
-  },
-  mainCenter: {
+  locationRight: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
+    gap: 6,
+  },
+  mainCard: {
+    borderRadius: 24,
+    padding: 20,
     marginBottom: 16,
   },
   mainTopRow: {
@@ -219,18 +213,17 @@ const styles = StyleSheet.create({
     color: '#E5E7EB',
   },
   mainIconCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  pillRow: {
+  mainBottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginTop: 16,
   },
   infoPill: {
     flexDirection: 'row',
@@ -246,60 +239,63 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#fff',
   },
-  forecastHeader: {
+  summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 2,
+    marginBottom: 16,
+  },
+  summaryItem: {
+    flex: 1,
+    paddingVertical: 8,
+  },
+  summaryLabel: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.brandGrayText,
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: '#000',
+  },
+  forecastCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.brandGrayBorder,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   forecastTitle: {
     fontFamily: fonts.medium,
     fontSize: 15,
-    color: '#fff',
+    marginBottom: 6,
+    color: '#000',
   },
-  forecastSubtitle: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: '#E5E7EB',
+  forecastRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
   },
-  forecastScroll: {
-    paddingVertical: 4,
-    paddingHorizontal: 10, // add side padding so cards are not flush to the edges
-  },
-  forecastCard: {
-    width: 90,
-    borderRadius: 18,
-    backgroundColor: 'rgba(15,23,42,0.3)',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    marginRight: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  forecastCardActive: {
-    backgroundColor: 'rgba(15,23,42,0.55)',
+  forecastRowDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.brandGrayBorder,
   },
   forecastDay: {
     fontFamily: fonts.regular,
     fontSize: 14,
-    color: '#E5E7EB',
+    color: '#000',
   },
-  forecastIconRow: {
-    marginTop: 6,
-    marginBottom: 4,
-    alignItems: 'flex-start',
+  forecastRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   forecastTemp: {
     fontFamily: fonts.medium,
     fontSize: 15,
-    color: '#fff',
-  },
-  forecastTime: {
-    marginTop: 2,
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    color: '#E5E7EB',
+    color: '#000',
   },
 });
 

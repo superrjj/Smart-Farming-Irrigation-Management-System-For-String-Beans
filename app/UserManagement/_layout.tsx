@@ -7,6 +7,8 @@ export default function UserManagementLayout() {
       <Stack.Screen name="signup" options={{ headerShown: false }} />
       <Stack.Screen name="dashboard" options={{ headerShown: false }} />
       <Stack.Screen name="weatherUpdate" options={{ headerShown: false }} />
+      <Stack.Screen name="waterDistribution" options={{ headerShown: false }} />
+      <Stack.Screen name="irrigationSchedule" options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -88,7 +88,7 @@ export default function LoginScreen() {
                 resizeMode="contain"
               />
               <Text style={styles.title}>Smart Irrigation &amp; Monitor</Text>
-              <Text style={styles.subtitle}>User Login</Text>
+              <Text style={styles.subtitle}>Login</Text>
             </View>
 
             <View style={styles.form}>
