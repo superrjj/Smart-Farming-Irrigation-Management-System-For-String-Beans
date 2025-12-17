@@ -46,8 +46,8 @@ const MENU_ITEMS = [
 ];
 
 const ANALYTICS_SUB_ITEMS = [
-  { key: 'env', label: 'Environmental Condition Pattern Analyzer' },
-  { key: 'seasonal', label: 'Seasonal Irrigation Behavior Summary' },
+  { key: 'env', label: 'Pattern Analyzer' },
+  { key: 'seasonal', label: 'Seasonal Summary' },
 ];
 
 const DRAWER_WIDTH = Math.min(320, Dimensions.get('window').width * 0.8);
@@ -182,6 +182,7 @@ export default function DashboardScreen() {
   const [loadingName, setLoadingName] = useState<boolean>(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const drawerX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
 
   // Disable Android hardware back when on dashboard (so user can't go back to login)
@@ -412,6 +413,24 @@ export default function DashboardScreen() {
                         pathname: '/UserManagement/weatherUpdate',
                         params: { email },
                       });
+                    } else if (item.key === 'humidity') {
+                      setMenuOpen(false);
+                      router.push({
+                        pathname: '/UserManagement/humidity',
+                        params: { email },
+                      });
+                    } else if (item.key === 'temp') {
+                      setMenuOpen(false);
+                      router.push({
+                        pathname: '/UserManagement/temperature',
+                        params: { email },
+                      });
+                    } else if (item.key === 'soil') {
+                      setMenuOpen(false);
+                      router.push({
+                        pathname: '/UserManagement/soilMoisture',
+                        params: { email },
+                      });
                     } else if (item.key === 'water') {
                       setMenuOpen(false);
                       router.push({
@@ -435,18 +454,27 @@ export default function DashboardScreen() {
               ))}
 
               {/* Analytics & Reporting */}
-              <View className="analytics-header" style={styles.analyticsHeader}>
+              <TouchableOpacity
+                style={styles.analyticsHeader}
+                activeOpacity={0.8}
+                onPress={() => setAnalyticsOpen(prev => !prev)}>
                 <View style={styles.menuItemLeft}>
                   <FontAwesome name="bar-chart" size={18} color={colors.brandBlue} />
                   <Text style={styles.menuItemLabel}>Analytics &amp; Reporting</Text>
                 </View>
-              </View>
+                <FontAwesome
+                  name={analyticsOpen ? 'chevron-up' : 'chevron-down'}
+                  size={14}
+                  color={colors.brandGrayText}
+                />
+              </TouchableOpacity>
 
-              {ANALYTICS_SUB_ITEMS.map(sub => (
-                <TouchableOpacity key={sub.key} style={styles.subMenuItem} activeOpacity={0.8}>
-                  <Text style={styles.subMenuItemLabel}>{sub.label}</Text>
-                </TouchableOpacity>
-              ))}
+              {analyticsOpen &&
+                ANALYTICS_SUB_ITEMS.map(sub => (
+                  <TouchableOpacity key={sub.key} style={styles.subMenuItem} activeOpacity={0.8}>
+                    <Text style={styles.subMenuItemLabel}>{sub.label}</Text>
+                  </TouchableOpacity>
+                ))}
 
               {/* Settings */}
               <TouchableOpacity style={styles.menuItem} activeOpacity={0.8}>
@@ -695,6 +723,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.brandGrayBorder,
     backgroundColor: '#F7F7F8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   subMenuItem: {
     paddingLeft: 40,
