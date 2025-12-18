@@ -13,6 +13,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Device from 'expo-device';
+import * as Crypto from 'expo-crypto';
 import { supabase } from '@/lib/supabase';
 
 const colors = {
@@ -44,11 +46,22 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
+      // Get device information
+      const deviceId = Device.osInternalBuildId || Device.modelId || 'unknown';
+      const deviceModel = Device.modelName || Device.modelId || 'unknown';
+
+      // Hash the password
+      const hashedPassword = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        password
+      );
+
+      // Query user with hashed password
       const { data: userProfile, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('email', email.trim())
-        .eq('password', password) // assumes password column; consider hashing in production
+        .eq('password', hashedPassword)
         .maybeSingle();
 
       if (error) {
@@ -61,6 +74,20 @@ export default function LoginScreen() {
         Alert.alert('Login Failed', 'Invalid credentials');
         setLoading(false);
         return;
+      }
+
+      // Update device_id and device_model
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({
+          device_id: deviceId,
+          device_model: deviceModel,
+        })
+        .eq('email', email.trim());
+
+      if (updateError) {
+        console.warn('Failed to update device info:', updateError.message);
+        // Continue with login even if device update fails
       }
 
       // Navigate to dashboard, pass email so we can fetch full name

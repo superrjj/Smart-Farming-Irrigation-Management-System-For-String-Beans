@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Device from 'expo-device';
+import * as Crypto from 'expo-crypto';
 import { supabase } from '@/lib/supabase';
 
 const colors = {
@@ -62,6 +64,16 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
+      // Get device information
+      const deviceId = Device.osInternalBuildId || Device.modelId || 'unknown';
+      const deviceModel = Device.modelName || Device.modelId || 'unknown';
+
+      // Hash the password
+      const hashedPassword = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        password
+      );
+
       const newId = generateUUID();
 
       const { error: profileError } = await supabase.from('user_profiles').insert({
@@ -69,7 +81,9 @@ export default function SignupScreen() {
         name,
         email: email.trim(),
         phone_number: phone,
-        password, // assumes a password column exists; consider hashing in production
+        password: hashedPassword,
+        device_id: deviceId,
+        device_model: deviceModel,
       });
 
       if (profileError) {
