@@ -56,6 +56,13 @@ export default function FarmerProfileScreen() {
     profilePicture: '',
   });
 
+  const [originalProfile, setOriginalProfile] = useState<UserProfile>({
+    name: '',
+    contactNumber: '',
+    email: email,
+    profilePicture: '',
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showPasswordSection, setShowPasswordSection] = useState(false);
@@ -83,18 +90,32 @@ export default function FarmerProfileScreen() {
         .maybeSingle();
 
       if (!error && data) {
-        setProfile({
+        const profileData = {
           name: data.name || '',
           contactNumber: data.phone_number || '',
           email: data.email || email,
           profilePicture: data.profile_picture || '',
-        });
+        };
+        setProfile(profileData);
+        setOriginalProfile(profileData);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const hasProfileChanges = () => {
+    return (
+      profile.name !== originalProfile.name ||
+      profile.contactNumber !== originalProfile.contactNumber ||
+      profile.profilePicture !== originalProfile.profilePicture
+    );
+  };
+
+  const hasPasswordChanges = () => {
+    return currentPassword !== '' || newPassword !== '' || confirmPassword !== '';
   };
 
   const handleSaveProfile = async () => {
@@ -135,12 +156,27 @@ export default function FarmerProfileScreen() {
         Alert.alert('Error', `Failed to save profile: ${error.message}`);
       } else {
         Alert.alert('Success', 'Profile updated successfully');
+        setOriginalProfile({...profile});
       }
     } catch (error) {
       console.error('Save profile error:', error);
       Alert.alert('Error', `Failed to save profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleBasicInfoSection = () => {
+    setShowBasicInfoSection(!showBasicInfoSection);
+    if (showPasswordSection) {
+      setShowPasswordSection(false);
+    }
+  };
+
+  const togglePasswordSection = () => {
+    setShowPasswordSection(!showPasswordSection);
+    if (showBasicInfoSection) {
+      setShowBasicInfoSection(false);
     }
   };
 
@@ -405,7 +441,7 @@ export default function FarmerProfileScreen() {
           <View style={styles.card}>
             <TouchableOpacity
               style={styles.basicInfoHeader}
-              onPress={() => setShowBasicInfoSection(!showBasicInfoSection)}
+              onPress={toggleBasicInfoSection}
             >
               <Text style={styles.cardTitle}>Basic Information</Text>
               <FontAwesome
@@ -418,7 +454,7 @@ export default function FarmerProfileScreen() {
             {showBasicInfoSection && (
               <View style={styles.basicInfoSection}>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Full Name</Text>
+                  <Text style={styles.inputLabel}>Farmer Name</Text>
                   <TextInput
                     style={styles.input}
                     value={profile.name}
@@ -446,6 +482,19 @@ export default function FarmerProfileScreen() {
                     editable={false}
                   />
                 </View>
+
+                {/* Save Profile Button inside Basic Information */}
+                <TouchableOpacity
+                  style={[styles.saveButton, (!hasProfileChanges() || saving) && styles.saveButtonDisabled]}
+                  onPress={handleSaveProfile}
+                  disabled={!hasProfileChanges() || saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save Information</Text>
+                  )}
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -454,7 +503,7 @@ export default function FarmerProfileScreen() {
           <View style={styles.card}>
             <TouchableOpacity
               style={styles.passwordHeader}
-              onPress={() => setShowPasswordSection(!showPasswordSection)}
+              onPress={togglePasswordSection}
             >
               <Text style={styles.cardTitle}>Change Password</Text>
               <FontAwesome
@@ -500,27 +549,15 @@ export default function FarmerProfileScreen() {
                 </View>
 
                 <TouchableOpacity
-                  style={styles.changePasswordButton}
+                  style={[styles.changePasswordButton, !hasPasswordChanges() && styles.saveButtonDisabled]}
                   onPress={handleChangePassword}
+                  disabled={!hasPasswordChanges()}
                 >
                   <Text style={styles.changePasswordButtonText}>Update Password</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
-
-          {/* Save Button */}
-          <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-            onPress={handleSaveProfile}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.saveButtonText}>Save Profile</Text>
-            )}
-          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -710,11 +747,10 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: colors.brandGreen,
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 8,
+    paddingVertical: 12,
     alignItems: 'center',
     marginTop: 8,
-    marginBottom: 32,
   },
   saveButtonDisabled: {
     backgroundColor: colors.brandGrayText,

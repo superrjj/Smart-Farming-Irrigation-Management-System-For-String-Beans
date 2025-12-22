@@ -7,6 +7,7 @@ import {
   Animated,
   BackHandler,
   Dimensions,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -179,6 +180,7 @@ export default function DashboardScreen() {
   const nextSchedule = 'Today, 6:00 PM';
 
   const [fullName, setFullName] = useState<string>('Farmer');
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [loadingName, setLoadingName] = useState<boolean>(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -208,15 +210,16 @@ export default function DashboardScreen() {
       try {
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('name')
+          .select('name, profile_picture')
           .eq('email', email)
           .maybeSingle();
 
-        if (!error && data?.name) {
-          setFullName(data.name);
+        if (!error && data) {
+          setFullName(data.name || 'Farmer');
+          setProfilePicture(data.profile_picture);
         }
-      } catch {
-        // ignore for now, keep default name
+      } catch (error) {
+        console.error('Error fetching profile:', error);
       } finally {
         setLoadingName(false);
       }
@@ -392,9 +395,19 @@ export default function DashboardScreen() {
             showsVerticalScrollIndicator={false}>
             {/* User header inside drawer */}
             <View style={styles.userHeader}>
-              <View style={styles.avatarCircle}>
-                <Text style={styles.avatarInitial}>{fullName.charAt(0).toUpperCase()}</Text>
-              </View>
+              {profilePicture ? (
+                <Image 
+                  source={{ uri: profilePicture }} 
+                  style={styles.profilePicture}
+                  onError={(e) => {
+                    console.log('Profile picture failed to load:', profilePicture);
+                  }}
+                />
+              ) : (
+                <View style={styles.avatarCircle}>
+                  <Text style={styles.avatarInitial}>{fullName.charAt(0).toUpperCase()}</Text>
+                </View>
+              )}
               <View style={styles.userInfo}>
                 <Text style={styles.userLabel}>Farmer</Text>
                 {loadingName ? (
@@ -679,6 +692,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 18,
     color: colors.brandBlue,
+  },
+  profilePicture: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E6F4FE',
   },
   userInfo: {
     marginLeft: 12,
