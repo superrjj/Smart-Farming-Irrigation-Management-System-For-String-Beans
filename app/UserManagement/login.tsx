@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Device from 'expo-device';
 import * as Crypto from 'expo-crypto';
 import { supabase } from '@/lib/supabase';
+import { sendPasswordResetCode } from '@/lib/sendgrid';
 
 const colors = {
   brandGreen: '#3E9B4F',
@@ -37,6 +38,15 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Forgot password states
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [countdown, setCountdown] = useState(0);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -46,17 +56,14 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      // Get device information
       const deviceId = Device.osInternalBuildId || Device.modelId || 'unknown';
       const deviceModel = Device.modelName || Device.modelId || 'unknown';
 
-      // Hash the password
       const hashedPassword = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         password
       );
 
-      // Query user with hashed password
       const { data: userProfile, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -76,7 +83,6 @@ export default function LoginScreen() {
         return;
       }
 
-      // Update device_id and device_model
       const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
@@ -87,10 +93,8 @@ export default function LoginScreen() {
 
       if (updateError) {
         console.warn('Failed to update device info:', updateError.message);
-        // Continue with login even if device update fails
       }
 
-      // Navigate to dashboard, pass email so we can fetch full name
       router.replace({
         pathname: '/UserManagement/dashboard',
         params: { email: email.trim() },
@@ -99,6 +103,97 @@ export default function LoginScreen() {
       Alert.alert('Error', error.message || 'An unexpected error occurred');
       setLoading(false);
     }
+  };
+
+  const handleSendCode = async () => {
+    if (!forgotEmail) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      await sendPasswordResetCode(forgotEmail, code);
+      
+      setForgotStep(2);
+      startCountdown();
+      Alert.alert('Success', 'Verification code sent to your email');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send verification code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = () => {
+    if (!verificationCode) {
+      Alert.alert('Error', 'Please enter the verification code');
+      return;
+    }
+
+    setForgotStep(3);
+  };
+
+  const handleResetPassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const hashedPassword = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        newPassword
+      );
+
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({ password: hashedPassword })
+        .eq('email', forgotEmail);
+
+      if (updateError) throw updateError;
+
+      Alert.alert('Success', 'Password has been reset. You can now log in with your new password.', [
+        { text: 'OK', onPress: () => {
+          setShowForgotPassword(false);
+          resetForgotPasswordForm();
+        }}
+      ]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to reset password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startCountdown = () => {
+    setCountdown(30);
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const resetForgotPasswordForm = () => {
+    setForgotEmail('');
+    setVerificationCode('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setForgotStep(1);
+    setCountdown(0);
   };
 
   return (
@@ -157,11 +252,12 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Link href="/UserManagement/resetPassword" asChild>
-                <TouchableOpacity style={styles.forgotWrapper} activeOpacity={0.7}>
-                  <Text style={styles.forgotText}>Forgot password?</Text>
-                </TouchableOpacity>
-              </Link>
+              <TouchableOpacity 
+                style={styles.forgotWrapper} 
+                activeOpacity={0.7}
+                onPress={() => setShowForgotPassword(true)}>
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.loginButton, loading && styles.loginButtonDisabled]}
@@ -188,6 +284,133 @@ export default function LoginScreen() {
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
           <Text style={styles.loadingText}>Signing in...</Text>
+        </View>
+      )}
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => {
+                setShowForgotPassword(false);
+                resetForgotPasswordForm();
+              }}>
+              <FontAwesome name="times" size={20} color={colors.brandGrayText} />
+            </TouchableOpacity>
+
+            {forgotStep === 1 && (
+              <View style={styles.modalContent}>
+                <View style={styles.modalIconContainer}>
+                  <FontAwesome name="lock" size={32} color={colors.brandGreen} />
+                </View>
+                <Text style={styles.modalTitle}>Forgot Password?</Text>
+                <Text style={styles.modalDescription}>
+                  Enter your email address to receive a verification code
+                </Text>
+                <View style={styles.inputContainer}>
+                  <FontAwesome name="envelope" size={16} color={colors.brandGrayText} style={styles.modalInputIcon} />
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder="Email address"
+                    placeholderTextColor={colors.brandGrayText}
+                    value={forgotEmail}
+                    onChangeText={setForgotEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.sendButton, loading && styles.sendButtonDisabled]}
+                  onPress={handleSendCode}
+                  disabled={loading}>
+                  <Text style={styles.sendButtonText}>
+                    {loading ? 'Sending...' : 'Send Code'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {forgotStep === 2 && (
+              <View style={styles.modalContent}>
+                <View style={styles.modalIconContainer}>
+                  <FontAwesome name="envelope-open" size={32} color={colors.brandGreen} />
+                </View>
+                <Text style={styles.modalTitle}>Enter Verification Code</Text>
+                <Text style={styles.modalDescription}>
+                  We've sent a 6-digit code to {forgotEmail}
+                </Text>
+                <View style={styles.codeInputContainer}>
+                  <TextInput
+                    style={styles.codeInput}
+                    placeholder="000000"
+                    placeholderTextColor={colors.brandGrayText}
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                    keyboardType="numeric"
+                    maxLength={6}
+                    textAlign="center"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.sendButton}
+                  onPress={handleVerifyCode}>
+                  <Text style={styles.sendButtonText}>Verify Code</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.resendButton}
+                  onPress={handleSendCode}
+                  disabled={countdown > 0}>
+                  <Text style={[styles.resendButtonText, countdown > 0 && styles.resendButtonTextDisabled]}>
+                    {countdown > 0 ? `Resend code in ${countdown}s` : 'Resend code'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {forgotStep === 3 && (
+              <View style={styles.modalContent}>
+                <View style={styles.modalIconContainer}>
+                  <FontAwesome name="unlock" size={32} color={colors.brandGreen} />
+                </View>
+                <Text style={styles.modalTitle}>New Password</Text>
+                <Text style={styles.modalDescription}>
+                  Enter your new password
+                </Text>
+                <View style={styles.inputContainer}>
+                  <FontAwesome name="lock" size={16} color={colors.brandGrayText} style={styles.modalInputIcon} />
+                  <TextInput
+                    style={[styles.inputField, { letterSpacing: 0 }]}
+                    placeholder="New password"
+                    placeholderTextColor={colors.brandGrayText}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    secureTextEntry
+                  />
+                </View>
+                <View style={styles.inputContainer}>
+                  <FontAwesome name="lock" size={16} color={colors.brandGrayText} style={styles.modalInputIcon} />
+                  <TextInput
+                    style={[styles.inputField, { letterSpacing: 0 }]}
+                    placeholder="Confirm new password"
+                    placeholderTextColor={colors.brandGrayText}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.sendButton, loading && styles.sendButtonDisabled]}
+                  onPress={handleResetPassword}
+                  disabled={loading}>
+                  <Text style={styles.sendButtonText}>
+                    {loading ? 'Resetting...' : 'Reset Password'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
       )}
     </SafeAreaView>
@@ -325,5 +548,129 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
   },
+  // Modal styles
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modal: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 340,
+    position: 'relative',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    padding: 8,
+    zIndex: 10,
+  },
+  modalContent: {
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  modalIconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#f0f9f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 19,
+    color: colors.brandGreen,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalDescription: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.brandGrayText,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 18,
+    paddingHorizontal: 8,
+  },
+  inputContainer: {
+    width: '100%',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  modalInputIcon: {
+    position: 'absolute',
+    left: 14,
+    top: 14,
+    zIndex: 1,
+  },
+  inputField: {
+    height: 46,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.brandGrayBorder,
+    paddingLeft: 44,
+    paddingRight: 14,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: '#000',
+    width: '100%',
+  },
+  codeInputContainer: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  codeInput: {
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.brandGrayBorder,
+    fontFamily: fonts.regular,
+    fontSize: 20,
+    color: '#000',
+    width: '100%',
+    letterSpacing: 8,
+    textAlign: 'center',
+  },
+  sendButton: {
+    backgroundColor: colors.brandGreen,
+    borderRadius: 8,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  sendButtonDisabled: {
+    opacity: 0.6,
+  },
+  sendButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
+  },
+  resendButton: {
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  resendButtonText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.brandBlue,
+    textAlign: 'center',
+  },
+  resendButtonTextDisabled: {
+    color: colors.brandGrayText,
+  },
 });
-

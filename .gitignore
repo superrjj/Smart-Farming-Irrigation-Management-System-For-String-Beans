@@ -41,3 +41,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# API keys and sensitive config
+lib/sendgridConfig.ts
