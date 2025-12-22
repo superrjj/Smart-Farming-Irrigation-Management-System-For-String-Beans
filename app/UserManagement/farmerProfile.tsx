@@ -1,6 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as Crypto from 'expo-crypto';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -43,6 +44,14 @@ interface UserProfile {
   email: string;
   profilePicture?: string;
 }
+
+// Simple SHA-256 hashing function for React Native using expo-crypto
+const sha256 = async (message: string): Promise<string> => {
+  return await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    message
+  );
+};
 
 export default function FarmerProfileScreen() {
   const params = useLocalSearchParams<{ email?: string }>();
@@ -202,20 +211,58 @@ export default function FarmerProfileScreen() {
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      // Hash the current password to compare with stored password
+      const hashedCurrentPassword = await sha256(currentPassword);
+      
+      // Fetch current user data to verify password
+      const { data: userData, error: fetchError } = await supabase
+        .from('user_profiles')
+        .select('password')
+        .eq('email', email)
+        .maybeSingle();
 
-      if (error) {
-        Alert.alert('Error', 'Failed to update password');
-      } else {
-        Alert.alert('Success', 'Password updated successfully');
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        setShowPasswordSection(false);
+      if (fetchError) {
+        console.error('Error fetching user data:', fetchError);
+        Alert.alert('Error', 'Failed to verify current password');
+        return;
       }
+
+      if (!userData || !userData.password) {
+        Alert.alert('Error', 'User account not found or no password set');
+        return;
+      }
+
+      // Verify current password
+      if (userData.password !== hashedCurrentPassword) {
+        Alert.alert('Error', 'Current password is incorrect');
+        return;
+      }
+
+      // Hash the new password
+      const hashedNewPassword = await sha256(newPassword);
+
+      // Update password in database
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({
+          password: hashedNewPassword
+        })
+        .eq('email', email);
+
+      if (updateError) {
+        console.error('Error updating password:', updateError);
+        Alert.alert('Error', 'Failed to update password');
+        return;
+      }
+
+      Alert.alert('Success', 'Password updated successfully');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowPasswordSection(false);
+      
     } catch (error) {
+      console.error('Password change error:', error);
       Alert.alert('Error', 'Failed to update password');
     }
   };

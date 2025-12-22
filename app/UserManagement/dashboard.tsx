@@ -497,15 +497,6 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 ))}
 
-              {/* Settings */}
-              <TouchableOpacity style={styles.menuItem} activeOpacity={0.8}>
-                <View style={styles.menuItemLeft}>
-                  <FontAwesome name="cog" size={18} color={colors.brandBlue} />
-                  <Text style={styles.menuItemLabel}>Settings</Text>
-                </View>
-                <FontAwesome name="chevron-right" size={14} color={colors.brandGrayText} />
-              </TouchableOpacity>
-
               {/* Logout */}
               <TouchableOpacity style={styles.logoutItem} activeOpacity={0.8} onPress={handleLogout}>
                 <View style={styles.menuItemLeft}>
