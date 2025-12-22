@@ -268,7 +268,15 @@ export default function DashboardScreen() {
             <TouchableOpacity style={styles.iconButton}>
               <FontAwesome name="bell" size={20} color="#000" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => {
+                router.push({
+                  pathname: '/UserManagement/farmerProfile',
+                  params: { email },
+                });
+              }}
+            >
               <FontAwesome name="user-circle-o" size={22} color="#000" />
             </TouchableOpacity>
           </View>
