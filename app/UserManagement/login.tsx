@@ -113,6 +113,19 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
+      // Check if email exists in Supabase
+      const { data: existingUser, error: fetchError } = await supabase
+        .from('user_profiles')
+        .select('email')
+        .eq('email', forgotEmail)
+        .single();
+
+      if (fetchError || !existingUser) {
+        Alert.alert('Failed', 'Email address is not registered');
+        setLoading(false);
+        return;
+      }
+
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       
       await sendPasswordResetCode(forgotEmail, code);
@@ -312,7 +325,7 @@ export default function LoginScreen() {
                 <View style={styles.inputContainer}>
                   <FontAwesome name="envelope" size={16} color={colors.brandGrayText} style={styles.modalInputIcon} />
                   <TextInput
-                    style={styles.inputField}
+                    style={[styles.inputField, { letterSpacing: 0 }]}
                     placeholder="Email address"
                     placeholderTextColor={colors.brandGrayText}
                     value={forgotEmail}
@@ -649,6 +662,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 10,
     width: '100%',
   },
   sendButtonDisabled: {

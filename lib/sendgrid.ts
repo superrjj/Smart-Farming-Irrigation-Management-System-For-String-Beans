@@ -262,11 +262,6 @@ export async function sendPasswordResetCode(email: string, verificationCode: str
         <div class="container">
           <div class="header">
             <div class="logo">
-              <div class="logo-icon">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
-                </svg>
-              </div>
               <div class="logo-text">Smart Irrigation & Monitor</div>
               <div class="header-subtitle">for String Beans</div>
             </div>
@@ -276,7 +271,7 @@ export async function sendPasswordResetCode(email: string, verificationCode: str
             <div class="greeting">Hello! 👋</div>
             
             <p class="message">
-              We received a request to reset the password for your Smart Farming Irrigation System account. 
+              We received a request to reset the password for your Smart Irrigation & Monitor App account. 
               Use the verification code below to proceed with resetting your password.
             </p>
             
@@ -312,7 +307,7 @@ export async function sendPasswordResetCode(email: string, verificationCode: str
           
           <div class="footer">
             <p class="footer-text">
-              This is an automated message from Smart Farming Irrigation System.<br>
+              This is an automated message from Smart Irrigation & Monitor App.<br>
               Please do not reply to this email.
             </p>
             <div class="footer-links">
@@ -336,7 +331,7 @@ export async function sendPasswordResetCode(email: string, verificationCode: str
     body: JSON.stringify({
       personalizations: [{
         to: [{ email }],
-        subject: '🔐 Password Reset Verification Code - Smart Farming',
+        subject: 'Password Reset Verification Code - Smart Irrigation & Monitor App',
       }],
       from: { 
         email: SENDGRID_CONFIG.fromEmail,
