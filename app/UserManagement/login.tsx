@@ -157,9 +157,11 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={styles.forgotWrapper} activeOpacity={0.7}>
-                <Text style={styles.forgotText}>Forgot password?</Text>
-              </TouchableOpacity>
+              <Link href="/UserManagement/resetPassword" asChild>
+                <TouchableOpacity style={styles.forgotWrapper} activeOpacity={0.7}>
+                  <Text style={styles.forgotText}>Forgot password?</Text>
+                </TouchableOpacity>
+              </Link>
 
               <TouchableOpacity
                 style={[styles.loginButton, loading && styles.loginButtonDisabled]}
