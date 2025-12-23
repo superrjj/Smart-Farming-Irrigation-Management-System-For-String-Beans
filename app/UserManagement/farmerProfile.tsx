@@ -76,6 +76,7 @@ export default function FarmerProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [showBasicInfoSection, setShowBasicInfoSection] = useState(false);
+  const [showSettingsSection, setShowSettingsSection] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -180,6 +181,9 @@ export default function FarmerProfileScreen() {
     if (showPasswordSection) {
       setShowPasswordSection(false);
     }
+    if (showSettingsSection) {
+      setShowSettingsSection(false);
+    }
   };
 
   const togglePasswordSection = () => {
@@ -187,6 +191,23 @@ export default function FarmerProfileScreen() {
     if (showBasicInfoSection) {
       setShowBasicInfoSection(false);
     }
+    if (showSettingsSection) {
+      setShowSettingsSection(false);
+    }
+  };
+
+  const toggleSettingsSection = () => {
+    setShowSettingsSection(!showSettingsSection);
+    if (showBasicInfoSection) {
+      setShowBasicInfoSection(false);
+    }
+    if (showPasswordSection) {
+      setShowPasswordSection(false);
+    }
+  };
+
+  const handleSettingPress = (setting: string) => {
+    Alert.alert('Settings', `${setting} settings coming soon!`);
   };
 
   const handleChangePassword = async () => {
@@ -490,7 +511,10 @@ export default function FarmerProfileScreen() {
               style={styles.basicInfoHeader}
               onPress={toggleBasicInfoSection}
             >
-              <Text style={styles.cardTitle}>Basic Information</Text>
+              <View style={styles.sectionHeaderLeft}>
+                <FontAwesome name="user" size={18} color={colors.brandGrayText} />
+                <Text style={styles.cardTitle}>Basic Information</Text>
+              </View>
               <FontAwesome
                 name={showBasicInfoSection ? 'chevron-up' : 'chevron-down'}
                 size={16}
@@ -552,7 +576,10 @@ export default function FarmerProfileScreen() {
               style={styles.passwordHeader}
               onPress={togglePasswordSection}
             >
-              <Text style={styles.cardTitle}>Change Password</Text>
+              <View style={styles.sectionHeaderLeft}>
+                <FontAwesome name="lock" size={18} color={colors.brandGrayText} />
+                <Text style={styles.cardTitle}>Change Password</Text>
+              </View>
               <FontAwesome
                 name={showPasswordSection ? 'chevron-up' : 'chevron-down'}
                 size={16}
@@ -601,6 +628,53 @@ export default function FarmerProfileScreen() {
                   disabled={!hasPasswordChanges()}
                 >
                   <Text style={styles.changePasswordButtonText}>Update Password</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Settings Card */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.settingsHeader}
+              onPress={toggleSettingsSection}
+            >
+              <View style={styles.sectionHeaderLeft}>
+                <FontAwesome name="cog" size={18} color={colors.brandGrayText} />
+                <Text style={styles.cardTitle}>Settings</Text>
+              </View>
+              <FontAwesome
+                name={showSettingsSection ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={colors.brandGrayText}
+              />
+            </TouchableOpacity>
+
+            {showSettingsSection && (
+              <View style={styles.settingsSection}>
+                
+                <TouchableOpacity style={styles.settingItem} onPress={() => handleSettingPress('language')}>
+                  <View style={styles.settingItemLeft}>
+                    <FontAwesome name="language" size={18} color={colors.brandGrayText} />
+                    <Text style={styles.settingItemText}>Language</Text>
+                  </View>
+                  <FontAwesome name="chevron-right" size={16} color={colors.brandGrayText} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingItem} onPress={() => handleSettingPress('sensor-device')}>
+                  <View style={styles.settingItemLeft}>
+                    <FontAwesome name="microchip" size={18} color={colors.brandGrayText} />
+                    <Text style={styles.settingItemText}>Sensor Device</Text>
+                  </View>
+                  <FontAwesome name="chevron-right" size={16} color={colors.brandGrayText} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.settingItem} onPress={() => handleSettingPress('about')}>
+                  <View style={styles.settingItemLeft}>
+                    <FontAwesome name="info-circle" size={18} color={colors.brandGrayText} />
+                    <Text style={styles.settingItemText}>About</Text>
+                  </View>
+                  <FontAwesome name="chevron-right" size={16} color={colors.brandGrayText} />
                 </TouchableOpacity>
               </View>
             )}
@@ -672,7 +746,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 16,
     color: '#1F2937',
-    marginBottom: 16,
   },
   passwordHeader: {
     flexDirection: 'row',
@@ -688,6 +761,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   basicInfoSection: {
     marginTop: 16,
@@ -806,5 +884,31 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 16,
     color: '#fff',
+  },
+  settingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  settingsSection: {
+    marginTop: 16,
+  },
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.brandGrayBorder,
+  },
+  settingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingItemText: {
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: '#1F2937',
   },
 });
