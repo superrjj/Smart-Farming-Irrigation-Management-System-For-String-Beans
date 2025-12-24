@@ -281,12 +281,12 @@ const styles = StyleSheet.create({
   },
   signupButton: {
     backgroundColor: colors.brandGreen,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 8,
+    paddingVertical: 8,
     marginTop: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 52,
+    minHeight: 50,
     width: '100%',
     minWidth: '100%',
     alignSelf: 'stretch',
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   },
   signupButtonText: {
     fontFamily: fonts.semibold,
-    fontSize: 18,
+    fontSize: 16,
     color: '#fff',
     textAlign: 'center',
   },
@@ -309,12 +309,12 @@ const styles = StyleSheet.create({
   },
   inlineFooterText: {
     fontFamily: fonts.regular,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.brandGrayText,
   },
   inlineFooterLink: {
     fontFamily: fonts.medium,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.brandBlue,
   },
 });

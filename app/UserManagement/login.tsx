@@ -454,7 +454,6 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     gap: 12,
-    paddingTop: 24,
   },
   logo: {
     width: 96,
@@ -507,24 +506,24 @@ const styles = StyleSheet.create({
   },
   forgotText: {
     fontFamily: fonts.medium,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.brandBlue,
   },
   loginButton: {
     backgroundColor: colors.brandGreen,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 8,
+    paddingVertical: 8,
     marginTop: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 52,
+    minHeight: 50,
   },
   loginButtonDisabled: {
     opacity: 0.6,
   },
   loginButtonText: {
     fontFamily: fonts.semibold,
-    fontSize: 18,
+    fontSize: 16,
     color: '#fff',
     textAlign: 'center',
   },
@@ -537,12 +536,12 @@ const styles = StyleSheet.create({
   },
   inlineFooterText: {
     fontFamily: fonts.regular,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.brandGrayText,
   },
   inlineFooterLink: {
     fontFamily: fonts.medium,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.brandBlue,
   },
   loadingOverlay: {
@@ -659,7 +658,7 @@ const styles = StyleSheet.create({
   sendButton: {
     backgroundColor: colors.brandGreen,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
