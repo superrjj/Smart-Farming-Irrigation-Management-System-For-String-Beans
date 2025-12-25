@@ -82,6 +82,14 @@ export default function FarmerProfileScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // Farm Information states
+  const [showFarmSection, setShowFarmSection] = useState(false);
+  const [farmLocation, setFarmLocation] = useState('');
+  const [areaSize, setAreaSize] = useState('');
+  const [flowRate, setFlowRate] = useState('');
+  const [cropType, setCropType] = useState('');
+  const [savingFarmInfo, setSavingFarmInfo] = useState(false);
+
   useEffect(() => {
     fetchProfile();
   }, [email]);
@@ -123,6 +131,16 @@ export default function FarmerProfileScreen() {
       profile.profilePicture !== originalProfile.profilePicture
     );
   };
+
+
+  const hasFarmInfoChanges = () => {
+  return (
+    farmLocation.trim() !== '' ||
+    areaSize.trim() !== '' ||
+    flowRate.trim() !== '' ||
+    cropType.trim() !== ''
+  );
+};
 
   const hasPasswordChanges = () => {
     return currentPassword !== '' || newPassword !== '' || confirmPassword !== '';
@@ -184,6 +202,9 @@ export default function FarmerProfileScreen() {
     if (showSettingsSection) {
       setShowSettingsSection(false);
     }
+    if (showFarmSection) {
+      setShowFarmSection(false);
+    }
   };
 
   const togglePasswordSection = () => {
@@ -193,6 +214,9 @@ export default function FarmerProfileScreen() {
     }
     if (showSettingsSection) {
       setShowSettingsSection(false);
+    }
+    if (showFarmSection) {
+      setShowFarmSection(false);
     }
   };
 
@@ -204,10 +228,78 @@ export default function FarmerProfileScreen() {
     if (showPasswordSection) {
       setShowPasswordSection(false);
     }
+    if (showFarmSection) {
+      setShowFarmSection(false);
+    }
+  };
+
+  const toggleFarmSection = () => {
+    setShowFarmSection(!showFarmSection);
+    if (showBasicInfoSection) {
+      setShowBasicInfoSection(false);
+    }
+    if (showPasswordSection) {
+      setShowPasswordSection(false);
+    }
+    if (showSettingsSection) {
+      setShowSettingsSection(false);
+    }
   };
 
   const handleSettingPress = (setting: string) => {
     Alert.alert('Settings', `${setting} settings coming soon!`);
+  };
+
+  const handleSaveFarmInfo = async () => {
+    if (!farmLocation.trim()) {
+      Alert.alert('Error', 'Please enter farm location');
+      return;
+    }
+
+    if (!areaSize.trim()) {
+      Alert.alert('Error', 'Please enter area size');
+      return;
+    }
+
+    if (!flowRate.trim()) {
+      Alert.alert('Error', 'Please enter flow rate');
+      return;
+    }
+
+    if (!cropType.trim()) {
+      Alert.alert('Error', 'Please enter crop type');
+      return;
+    }
+
+    setSavingFarmInfo(true);
+    try {
+      const { error } = await supabase
+        .from('farm')
+        .insert({
+          location: farmLocation.trim(),
+          area_size: parseFloat(areaSize),
+          flow_rate: parseFloat(flowRate),
+          crop_type: cropType.trim(),
+        });
+
+      if (error) {
+        console.error('Error saving farm info:', error);
+        Alert.alert('Error', `Failed to save farm information: ${error.message}`);
+        return;
+      }
+
+      Alert.alert('Success', 'Farm information saved successfully');
+      setFarmLocation('');
+      setAreaSize('');
+      setFlowRate('');
+      setCropType('');
+      setShowFarmSection(false);
+    } catch (error) {
+      console.error('Save farm info error:', error);
+      Alert.alert('Error', 'Failed to save farm information');
+    } finally {
+      setSavingFarmInfo(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -575,6 +667,87 @@ export default function FarmerProfileScreen() {
             )}
           </View>
 
+        {/* Farm Information Card */}
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.farmHeader}
+            onPress={toggleFarmSection}
+          >
+            <View style={styles.sectionHeaderLeft}>
+              <FontAwesome name="leaf" size={18} color={colors.brandGrayText} />
+              <Text style={styles.cardTitle}>Farm Information</Text>
+            </View>
+            <FontAwesome
+              name={showFarmSection ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={colors.brandGrayText}
+            />
+          </TouchableOpacity>
+
+          {showFarmSection && (
+            <View style={styles.farmSection}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Farm Location</Text>
+                <TextInput
+                  style={styles.input}
+                  value={farmLocation}
+                  onChangeText={setFarmLocation}
+                  placeholder="Enter farm location"
+                  placeholderTextColor={colors.brandGrayText}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Area Size (hectares)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={areaSize}
+                  onChangeText={setAreaSize}
+                  placeholder="Enter area size"
+                  placeholderTextColor={colors.brandGrayText}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Flow Rate (L/min)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={flowRate}
+                  onChangeText={setFlowRate}
+                  placeholder="Enter flow rate"
+                  placeholderTextColor={colors.brandGrayText}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Crop Type</Text>
+                <TextInput
+                  style={styles.input}
+                  value={cropType}
+                  onChangeText={setCropType}
+                  placeholder="Enter crop type"
+                  placeholderTextColor={colors.brandGrayText}
+                />
+              </View>
+
+              {/* Save Farm Information Button - WITH VALIDATION */}
+              <TouchableOpacity
+                style={[styles.saveFarmButton, (!hasFarmInfoChanges() || savingFarmInfo) && styles.saveButtonDisabled]}
+                onPress={handleSaveFarmInfo}
+                disabled={!hasFarmInfoChanges() || savingFarmInfo}
+              >
+                {savingFarmInfo ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save Farm Information</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
           {/* Password Change Card */}
           <View style={styles.card}>
             <TouchableOpacity
@@ -601,6 +774,7 @@ export default function FarmerProfileScreen() {
                     value={currentPassword}
                     onChangeText={setCurrentPassword}
                     placeholder="Enter current password"
+                    placeholderTextColor={colors.brandGrayText}
                     secureTextEntry
                   />
                 </View>
@@ -612,9 +786,11 @@ export default function FarmerProfileScreen() {
                     value={newPassword}
                     onChangeText={setNewPassword}
                     placeholder="Enter new password (min 6 chars)"
+                    placeholderTextColor={colors.brandGrayText}
                     secureTextEntry
                   />
                 </View>
+
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Confirm New Password</Text>
@@ -623,6 +799,7 @@ export default function FarmerProfileScreen() {
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
                     placeholder="Confirm new password"
+                    placeholderTextColor={colors.brandGrayText}
                     secureTextEntry
                   />
                 </View>
@@ -666,14 +843,6 @@ export default function FarmerProfileScreen() {
                   <FontAwesome name="chevron-right" size={16} color={colors.brandGrayText} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.settingItem} onPress={() => handleSettingPress('sensor-device')}>
-                  <View style={styles.settingItemLeft}>
-                    <FontAwesome name="microchip" size={18} color={colors.brandGrayText} />
-                    <Text style={styles.settingItemText}>Sensor Device</Text>
-                  </View>
-                  <FontAwesome name="chevron-right" size={16} color={colors.brandGrayText} />
-                </TouchableOpacity>
-
                 <TouchableOpacity style={styles.settingItem} onPress={() => handleSettingPress('about')}>
                   <View style={styles.settingItemLeft}>
                     <FontAwesome name="info-circle" size={18} color={colors.brandGrayText} />
@@ -684,6 +853,8 @@ export default function FarmerProfileScreen() {
               </View>
             )}
           </View>
+
+         
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -752,11 +923,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1F2937',
   },
-  passwordHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   profilePicHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -767,13 +933,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  farmHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  passwordHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  settingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  basicInfoSection: {
-    marginTop: 16,
   },
   profilePicSection: {
     marginTop: 16,
@@ -836,11 +1014,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.brandGrayText,
   },
+  basicInfoSection: {
+    marginTop: 16,
+  },
+  farmSection: {
+    marginTop: 16,
+  },
   passwordSection: {
     marginTop: 16,
   },
+  settingsSection: {
+    marginTop: 16,
+  },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   inputLabel: {
     fontFamily: fonts.medium,
@@ -863,19 +1050,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     color: colors.brandGrayText,
   },
-  changePasswordButton: {
-    backgroundColor: colors.brandBlue,
+  saveButton: {
+    backgroundColor: colors.brandGreen,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 8,
   },
-  changePasswordButtonText: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: '#fff',
-  },
-  saveButton: {
+  saveFarmButton: {
     backgroundColor: colors.brandGreen,
     borderRadius: 8,
     paddingVertical: 12,
@@ -890,13 +1072,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
   },
-  settingsHeader: {
-    flexDirection: 'row',
+  changePasswordButton: {
+    backgroundColor: colors.brandBlue,
+    borderRadius: 8,
+    paddingVertical: 12,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginTop: 8,
   },
-  settingsSection: {
-    marginTop: 16,
+  changePasswordButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: '#fff',
   },
   settingItem: {
     flexDirection: 'row',

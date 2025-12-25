@@ -44,6 +44,7 @@ const MENU_ITEMS = [
   { key: 'weather', icon: 'cloud', label: 'Weather Update' },
   { key: 'water', icon: 'tint', label: 'Water Distribution' },
   { key: 'schedule', icon: 'calendar', label: 'Irrigation Schedule' },
+  { key: 'sensor-device', icon: 'microchip', label: 'Sensor Device' },
 ];
 
 const ANALYTICS_SUB_ITEMS = [
@@ -462,6 +463,12 @@ export default function DashboardScreen() {
                       setMenuOpen(false);
                       router.push({
                         pathname: '/UserManagement/irrigationSchedule',
+                        params: { email },
+                      });
+                    } else if (item.key === 'sensor-device') {
+                      setMenuOpen(false);
+                      router.push({
+                        pathname: '/UserManagement/sensorDevice',
                         params: { email },
                       });
                     }
