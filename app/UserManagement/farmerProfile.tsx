@@ -539,9 +539,14 @@ export default function FarmerProfileScreen() {
                   <TextInput
                     style={styles.input}
                     value={profile.contactNumber}
-                    onChangeText={(text) => setProfile({ ...profile, contactNumber: text })}
+                    onChangeText={(text) => {
+                      // Only allow numbers and limit to 11 digits
+                      const numericText = text.replace(/[^0-9]/g, '');
+                      setProfile({ ...profile, contactNumber: numericText.slice(0, 11) });
+                    }}
                     placeholder="Enter mobile number"
                     keyboardType="phone-pad"
+                    maxLength={11}
                   />
                 </View>
 

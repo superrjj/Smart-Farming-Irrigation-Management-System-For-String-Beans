@@ -51,9 +51,81 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Password requirements validation
+  const getPasswordRequirements = (pwd: string) => {
+    return {
+      length: pwd.length >= 8,
+      uppercase: /[A-Z]/.test(pwd),
+      lowercase: /[a-z]/.test(pwd),
+      number: /[0-9]/.test(pwd),
+      symbol: /[!@#$%^&*(),.?":{}|<>]/.test(pwd)
+    };
+  };
+
+  const passwordRequirements = getPasswordRequirements(password);
+  
+  // Check if all password requirements are met
+  const allPasswordRequirementsMet = Object.values(passwordRequirements).every(req => req === true);
+  
+  // Check if form is ready for submission
+  const isFormValid = name && email && phone && password && confirmPassword && 
+                    password === confirmPassword && allPasswordRequirementsMet;
+
+  const [emailExists, setEmailExists] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+
+  const checkEmailExists = async (emailToCheck: string) => {
+    if (!emailToCheck || !emailToCheck.includes('@')) {
+      setEmailExists(false);
+      return;
+    }
+
+    setCheckingEmail(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('email')
+        .eq('email', emailToCheck.trim())
+        .maybeSingle();
+
+      setEmailExists(!error && !!data);
+    } catch (error) {
+      console.error('Error checking email:', error);
+      setEmailExists(false);
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    setEmailExists(false);
+    if (text.includes('@')) {
+      const timeoutId = setTimeout(() => {
+        checkEmailExists(text);
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  };
+
   const handleSignup = async () => {
     if (!name || !email || !phone || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    // Check if email already exists
+    if (emailExists) {
+      Alert.alert('Error', 'This email address is already registered. Please use a different email or try logging in.');
+      return;
+    }
+
+    // Check if all password requirements are met
+    const requirements = getPasswordRequirements(password);
+    const allRequirementsMet = Object.values(requirements).every(req => req === true);
+    
+    if (!allRequirementsMet) {
+      Alert.alert('Error', 'Please meet all password requirements before signing up');
       return;
     }
 
@@ -141,11 +213,28 @@ export default function SignupScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={handleEmailChange}
                   editable={!loading}
                   style={styles.input}
                 />
+                {checkingEmail && (
+                  <ActivityIndicator size="small" color={colors.brandGrayText} style={styles.emailCheckIcon} />
+                )}
+                {!checkingEmail && email && email.includes('@') && (
+                  <FontAwesome 
+                    name={emailExists ? "times-circle" : "check-circle"} 
+                    size={16} 
+                    color={emailExists ? "#EF4444" : colors.brandGreen} 
+                    style={styles.emailCheckIcon} 
+                  />
+                )}
               </View>
+              
+              {emailExists && (
+                <Text style={styles.emailErrorText}>
+                  This email is already registered. Please use a different email.
+                </Text>
+              )}
 
               <View style={styles.inputWrapper}>
                 <FontAwesome name="phone" size={18} color={colors.brandGrayText} style={styles.inputIcon} />
@@ -154,9 +243,14 @@ export default function SignupScreen() {
                   placeholderTextColor={colors.brandGrayText}
                   keyboardType="phone-pad"
                   value={phone}
-                  onChangeText={setPhone}
+                  onChangeText={(text) => {
+                    // Only allow numbers and limit to 11 digits
+                    const numericText = text.replace(/[^0-9]/g, '');
+                    setPhone(numericText.slice(0, 11));
+                  }}
                   editable={!loading}
                   style={styles.input}
+                  maxLength={11}
                 />
               </View>
 
@@ -172,6 +266,53 @@ export default function SignupScreen() {
                   style={styles.input}
                 />
               </View>
+
+              {/* Password Requirements */}
+              {password.length > 0 && (
+                <View style={styles.passwordRequirements}>
+                  <Text style={styles.requirementsTitle}>Password must:</Text>
+                  <View style={styles.requirementItem}>
+                    <FontAwesome 
+                      name={passwordRequirements.length ? "check-circle" : "times-circle"} 
+                      size={16} 
+                      color={passwordRequirements.length ? colors.brandGreen : "#EF4444"} 
+                    />
+                    <Text style={[styles.requirementText, passwordRequirements.length && styles.requirementMet]}>
+                      Contain 8 to 30 characters
+                    </Text>
+                  </View>
+                  <View style={styles.requirementItem}>
+                    <FontAwesome 
+                      name={passwordRequirements.uppercase ? "check-circle" : "times-circle"} 
+                      size={16} 
+                      color={passwordRequirements.uppercase ? colors.brandGreen : "#EF4444"} 
+                    />
+                    <Text style={[styles.requirementText, passwordRequirements.uppercase && styles.requirementMet]}>
+                      Contain both lower and uppercase letters
+                    </Text>
+                  </View>
+                  <View style={styles.requirementItem}>
+                    <FontAwesome 
+                      name={passwordRequirements.number ? "check-circle" : "times-circle"} 
+                      size={16} 
+                      color={passwordRequirements.number ? colors.brandGreen : "#EF4444"} 
+                    />
+                    <Text style={[styles.requirementText, passwordRequirements.number && styles.requirementMet]}>
+                      Contain one number
+                    </Text>
+                  </View>
+                  <View style={styles.requirementItem}>
+                    <FontAwesome 
+                      name={passwordRequirements.symbol ? "check-circle" : "times-circle"} 
+                      size={16} 
+                      color={passwordRequirements.symbol ? colors.brandGreen : "#EF4444"} 
+                    />
+                    <Text style={[styles.requirementText, passwordRequirements.symbol && styles.requirementMet]}>
+                      Contain one special character !@#$%^&*()_+
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               <View style={styles.inputWrapper}>
                 <FontAwesome name="lock" size={18} color={colors.brandGrayText} style={styles.inputIcon} />
@@ -316,6 +457,45 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 14,
     color: colors.brandBlue,
+  },
+  passwordRequirements: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  requirementsTitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 8,
+  },
+  requirementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  requirementText: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.brandGrayText,
+    marginLeft: 8,
+  },
+  requirementMet: {
+    color: colors.brandGreen,
+  },
+  emailCheckIcon: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 1,
+  },
+  emailErrorText: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: '#EF4444',
+    marginTop: 4,
+    marginBottom: 8,
   },
 });
 
