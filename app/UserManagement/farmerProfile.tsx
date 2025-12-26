@@ -84,7 +84,7 @@ export default function FarmerProfileScreen() {
 
   // Farm Information states
   const [showFarmSection, setShowFarmSection] = useState(false);
-  const [farmId, setFarmId] = useState<number | null>(null);
+  const [farmId, setFarmId] = useState<string | null>(null);
   const [farmName, setFarmName] = useState('');
   const [farmLocation, setFarmLocation] = useState('');
   const [areaSize, setAreaSize] = useState('');

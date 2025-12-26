@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,7 +34,8 @@ const fonts = {
 };
 
 interface SensorDevice {
-  id: number;
+  id: string;
+  farm_id: string;
   sensor_type: string;
   serial_number: string;
   installation_date: string;
@@ -56,34 +56,83 @@ export default function SensorDeviceScreen() {
     serial_number: '',
   });
   const [saving, setSaving] = useState(false);
+  const [farmId, setFarmId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDevices();
+    fetchFarmAndDevices();
   }, [email]);
 
-  const fetchDevices = async () => {
+  const fetchFarmAndDevices = async () => {
     try {
-      const { data, error } = await supabase
+      // STEP 1: Get user's UUID from user_profiles
+      console.log('Fetching user profile for email:', email);
+      const { data: userData, error: userError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (userError || !userData) {
+        console.error('Error fetching user:', userError);
+        Alert.alert('Error', 'User profile not found. Please complete your profile first.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Found user_id:', userData.id);
+
+      // STEP 2: Get farm using owner_id (same as user_profiles.id)
+      const { data: farmData, error: farmError } = await supabase
+        .from('farm')
+        .select('id')
+        .eq('owner_id', userData.id)
+        .maybeSingle();
+
+      if (farmError) {
+        console.error('Error fetching farm:', farmError);
+        Alert.alert('Error', 'Failed to fetch farm information');
+        setLoading(false);
+        return;
+      }
+
+      if (!farmData?.id) {
+        Alert.alert('No Farm Found', 'Please set up your farm information in the profile section first.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Found farm_id:', farmData.id);
+      setFarmId(farmData.id);
+
+      // STEP 3: Fetch devices for this farm
+      const { data: devicesData, error: devicesError } = await supabase
         .from('sensor_device')
         .select('*')
-        .order('id', { ascending: false });
+        .eq('farm_id', farmData.id)
+        .order('installation_date', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching devices:', error);
+      if (devicesError) {
+        console.error('Error fetching devices:', devicesError);
         Alert.alert('Error', 'Failed to fetch sensor devices');
         return;
       }
 
-      setDevices(data || []);
+      console.log('Found devices:', devicesData?.length || 0);
+      setDevices(devicesData || []);
     } catch (error) {
-      console.error('Error fetching devices:', error);
-      Alert.alert('Error', 'Failed to fetch sensor devices');
+      console.error('Error fetching data:', error);
+      Alert.alert('Error', 'Failed to fetch data');
     } finally {
       setLoading(false);
     }
   };
 
   const handleAddDevice = async () => {
+    if (!farmId) {
+      Alert.alert('Error', 'Farm information not found. Please set up your farm in the profile section first.');
+      return;
+    }
+
     if (!newDevice.sensor_type.trim()) {
       Alert.alert('Error', 'Please enter sensor type');
       return;
@@ -99,6 +148,7 @@ export default function SensorDeviceScreen() {
       const { data, error } = await supabase
         .from('sensor_device')
         .insert({
+          farm_id: farmId,
           sensor_type: newDevice.sensor_type.trim(),
           serial_number: newDevice.serial_number.trim(),
           installation_date: new Date().toISOString().split('T')[0],
@@ -123,6 +173,28 @@ export default function SensorDeviceScreen() {
       Alert.alert('Error', 'Failed to add device');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteDevice = async (deviceId: string) => {
+    try {
+      const { error } = await supabase
+        .from('sensor_device')
+        .delete()
+        .eq('id', deviceId);
+
+      if (error) {
+        console.error('Error deleting device:', error);
+        Alert.alert('Error', 'Failed to delete device');
+        return;
+      }
+
+      // Remove the device from the local state
+      setDevices(devices.filter(device => device.id !== deviceId));
+      Alert.alert('Success', 'Device deleted successfully');
+    } catch (error) {
+      console.error('Error deleting device:', error);
+      Alert.alert('Error', 'Failed to delete device');
     }
   };
 
@@ -158,17 +230,29 @@ export default function SensorDeviceScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Info banner if no farm */}
+          {!farmId && (
+            <View style={styles.infoBanner}>
+              <FontAwesome name="info-circle" size={20} color={colors.brandBlue} />
+              <Text style={styles.infoBannerText}>
+                Please set up your farm information in your profile first to add sensor devices.
+              </Text>
+            </View>
+          )}
+
           {/* Add Device Button */}
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowAddForm(!showAddForm)}
-          >
-            <FontAwesome name="plus" size={18} color="#fff" />
-            <Text style={styles.addButtonText}>Add New Device</Text>
-          </TouchableOpacity>
+          {farmId && (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowAddForm(!showAddForm)}
+            >
+              <FontAwesome name="plus" size={18} color="#fff" />
+              <Text style={styles.addButtonText}>Add New Device</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Add Device Form */}
-          {showAddForm && (
+          {showAddForm && farmId && (
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Register New Device</Text>
               
@@ -226,7 +310,11 @@ export default function SensorDeviceScreen() {
               <View style={styles.emptyState}>
                 <FontAwesome name="microchip" size={48} color={colors.brandGrayText} />
                 <Text style={styles.emptyStateText}>No devices registered yet</Text>
-                <Text style={styles.emptyStateSubText}>Add your first sensor device to get started</Text>
+                <Text style={styles.emptyStateSubText}>
+                  {farmId 
+                    ? 'Add your first sensor device to get started'
+                    : 'Set up your farm information first to add devices'}
+                </Text>
               </View>
             ) : (
               devices.map((device) => (
@@ -234,7 +322,7 @@ export default function SensorDeviceScreen() {
                   <View style={styles.deviceHeader}>
                     <View style={styles.deviceInfo}>
                       <Text style={styles.deviceName}>{device.sensor_type}</Text>
-                      <Text style={styles.deviceId}>SN: {device.serial_number}</Text>
+                      <Text style={styles.deviceId}>Serial Number: {device.serial_number}</Text>
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusColor(device.status) }]}>
                       <Text style={styles.statusText}>{device.status ? 'ACTIVE' : 'INACTIVE'}</Text>
@@ -257,6 +345,13 @@ export default function SensorDeviceScreen() {
                       <Text style={styles.detailLabel}>Last Calibration:</Text>
                       <Text style={styles.detailValue}>{device.last_calibration_date}</Text>
                     </View>
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => handleDeleteDevice(device.id)}
+                    >
+                      <FontAwesome name="trash" size={16} color={colors.red} />
+                      <Text style={styles.deleteButtonText}>Delete</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))
@@ -314,6 +409,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     gap: 16,
+  },
+  infoBanner: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  infoBannerText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: '#1E40AF',
+    lineHeight: 20,
   },
   addButton: {
     backgroundColor: colors.brandGreen,
@@ -465,5 +577,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1F2937',
     flex: 1,
+  },
+  deleteButton: {
+    backgroundColor: colors.red,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  deleteButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: '#fff',
   },
 });
