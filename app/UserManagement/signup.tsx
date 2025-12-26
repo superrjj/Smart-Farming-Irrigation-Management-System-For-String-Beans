@@ -450,12 +450,12 @@ const styles = StyleSheet.create({
   },
   inlineFooterText: {
     fontFamily: fonts.regular,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.brandGrayText,
   },
   inlineFooterLink: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.brandBlue,
   },
   passwordRequirements: {

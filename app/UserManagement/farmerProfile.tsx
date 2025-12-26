@@ -84,11 +84,18 @@ export default function FarmerProfileScreen() {
 
   // Farm Information states
   const [showFarmSection, setShowFarmSection] = useState(false);
+  const [farmId, setFarmId] = useState<number | null>(null);
+  const [farmName, setFarmName] = useState('');
   const [farmLocation, setFarmLocation] = useState('');
   const [areaSize, setAreaSize] = useState('');
-  const [flowRate, setFlowRate] = useState('');
   const [cropType, setCropType] = useState('');
   const [savingFarmInfo, setSavingFarmInfo] = useState(false);
+  const [originalFarmData, setOriginalFarmData] = useState({
+    farmName: '',
+    farmLocation: '',
+    areaSize: '',
+    cropType: '',
+  });
 
   useEffect(() => {
     fetchProfile();
@@ -116,11 +123,43 @@ export default function FarmerProfileScreen() {
         };
         setProfile(profileData);
         setOriginalProfile(profileData);
+
+        // Fetch farm data after getting user profile
+        await fetchFarmData(data.id);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // New function to fetch farm data
+  const fetchFarmData = async (userId: string) => {
+    try {
+      const { data: farmData, error: farmError } = await supabase
+        .from('farm')
+        .select('*')
+        .eq('owner_id', userId)
+        .maybeSingle();
+
+      if (!farmError && farmData) {
+        setFarmId(farmData.id);
+        setFarmName(farmData.farm_name || '');
+        setFarmLocation(farmData.location || '');
+        setAreaSize(farmData.area_sqm?.toString() || '');
+        setCropType(farmData.crop_type || '');
+        
+        // Store original farm data
+        setOriginalFarmData({
+          farmName: farmData.farm_name || '',
+          farmLocation: farmData.location || '',
+          areaSize: farmData.area_sqm?.toString() || '',
+          cropType: farmData.crop_type || '',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching farm data:', error);
     }
   };
 
@@ -132,15 +171,14 @@ export default function FarmerProfileScreen() {
     );
   };
 
-
   const hasFarmInfoChanges = () => {
-  return (
-    farmLocation.trim() !== '' ||
-    areaSize.trim() !== '' ||
-    flowRate.trim() !== '' ||
-    cropType.trim() !== ''
-  );
-};
+    return (
+      farmName.trim() !== originalFarmData.farmName ||
+      farmLocation.trim() !== originalFarmData.farmLocation ||
+      areaSize.trim() !== originalFarmData.areaSize ||
+      cropType.trim() !== originalFarmData.cropType
+    );
+  };
 
   const hasPasswordChanges = () => {
     return currentPassword !== '' || newPassword !== '' || confirmPassword !== '';
@@ -159,14 +197,7 @@ export default function FarmerProfileScreen() {
 
     setSaving(true);
     try {
-      console.log('Saving profile:', {
-        email: profile.email,
-        name: profile.name.trim(),
-        phone_number: profile.contactNumber.trim(),
-        profile_picture: profile.profilePicture || null,
-      });
-      
-      const { error, data } = await supabase
+      const { error } = await supabase
         .from('user_profiles')
         .upsert({
           email: profile.email,
@@ -176,8 +207,6 @@ export default function FarmerProfileScreen() {
         }, {
           onConflict: 'email'
         });
-
-      console.log('Save result:', { error, data });
 
       if (error) {
         console.error('Database save error:', error);
@@ -251,6 +280,11 @@ export default function FarmerProfileScreen() {
   };
 
   const handleSaveFarmInfo = async () => {
+    if (!farmName.trim()) {
+      Alert.alert('Error', 'Please enter farm name');
+      return;
+    }
+
     if (!farmLocation.trim()) {
       Alert.alert('Error', 'Please enter farm location');
       return;
@@ -261,11 +295,6 @@ export default function FarmerProfileScreen() {
       return;
     }
 
-    if (!flowRate.trim()) {
-      Alert.alert('Error', 'Please enter flow rate');
-      return;
-    }
-
     if (!cropType.trim()) {
       Alert.alert('Error', 'Please enter crop type');
       return;
@@ -273,14 +302,54 @@ export default function FarmerProfileScreen() {
 
     setSavingFarmInfo(true);
     try {
-      const { error } = await supabase
-        .from('farm')
-        .insert({
-          location: farmLocation.trim(),
-          area_size: parseFloat(areaSize),
-          flow_rate: parseFloat(flowRate),
-          crop_type: cropType.trim(),
-        });
+      // Get the user's UUID from user_profiles using email
+      const { data: userData, error: userError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (userError || !userData) {
+        console.error('Error fetching user:', userError);
+        Alert.alert('Error', 'User not found. Please complete your profile first.');
+        setSavingFarmInfo(false);
+        return;
+      }
+
+      const farmData = {
+        owner_id: userData.id,
+        farm_name: farmName.trim(),
+        location: farmLocation.trim(),
+        area_sqm: parseFloat(areaSize),
+        crop_type: cropType.trim(),
+      };
+      
+      let error;
+      let savedData;
+
+      // Check if updating existing farm or creating new one
+      if (farmId) {
+        // UPDATE existing farm
+        const result = await supabase
+          .from('farm')
+          .update(farmData)
+          .eq('id', farmId)
+          .select()
+          .single();
+        
+        error = result.error;
+        savedData = result.data;
+      } else {
+        // INSERT new farm
+        const result = await supabase
+          .from('farm')
+          .insert(farmData)
+          .select()
+          .single();
+        
+        error = result.error;
+        savedData = result.data;
+      }
 
       if (error) {
         console.error('Error saving farm info:', error);
@@ -288,12 +357,24 @@ export default function FarmerProfileScreen() {
         return;
       }
 
-      Alert.alert('Success', 'Farm information saved successfully');
-      setFarmLocation('');
-      setAreaSize('');
-      setFlowRate('');
-      setCropType('');
-      setShowFarmSection(false);
+      // Update states with saved data
+      if (savedData) {
+        setFarmId(savedData.id);
+        setFarmName(savedData.farm_name);
+        setFarmLocation(savedData.location);
+        setAreaSize(savedData.area_sqm.toString());
+        setCropType(savedData.crop_type);
+
+        // Update original data
+        setOriginalFarmData({
+          farmName: savedData.farm_name,
+          farmLocation: savedData.location,
+          areaSize: savedData.area_sqm.toString(),
+          cropType: savedData.crop_type,
+        });
+      }
+
+      Alert.alert('Success', `Farm information ${farmId ? 'updated' : 'saved'} successfully`);
     } catch (error) {
       console.error('Save farm info error:', error);
       Alert.alert('Error', 'Failed to save farm information');
@@ -324,10 +405,8 @@ export default function FarmerProfileScreen() {
     }
 
     try {
-      // Hash the current password to compare with stored password
       const hashedCurrentPassword = await sha256(currentPassword);
       
-      // Fetch current user data to verify password
       const { data: userData, error: fetchError } = await supabase
         .from('user_profiles')
         .select('password')
@@ -345,16 +424,13 @@ export default function FarmerProfileScreen() {
         return;
       }
 
-      // Verify current password
       if (userData.password !== hashedCurrentPassword) {
         Alert.alert('Error', 'Current password is incorrect');
         return;
       }
 
-      // Hash the new password
       const hashedNewPassword = await sha256(newPassword);
 
-      // Update password in database
       const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
@@ -405,112 +481,98 @@ export default function FarmerProfileScreen() {
         });
 
     if (!result.canceled && result.assets[0]) {
-      console.log('Image selected:', {
-        uri: result.assets[0].uri,
-        width: result.assets[0].width,
-        height: result.assets[0].height,
-        fileSize: result.assets[0].fileSize,
-      });
       uploadImage(result.assets[0].uri);
     }
   };
 
-  const uploadImage = async (uri: string) => {
-    setUploadingImage(true);
-    try {
-      console.log('Starting image upload for:', uri);
-      
-      // Create FormData and append the file
-      const formData = new FormData();
-      
-      // Extract file extension
-      const fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const userId = email.replace(/[@.]/g, '-');
-      const fileName = `farmer_profile_pictures/${userId}/profile-${Date.now()}.${fileExtension}`;
-      
-      // Create file object for FormData
-      const file = {
-        uri: uri,
-        type: `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`,
-        name: fileName.split('/').pop() || 'profile.jpg',
-      } as any;
-      
-      formData.append('file', file);
-      
-      console.log('Uploading file:', fileName);
-      
-      // Get Supabase credentials
-      // Note: Make sure these are exported from your supabase.ts file
-      const supabaseUrl = (supabase as any).supabaseUrl || 'https://xzouepokakzubwjogmdr.supabase.co';
-      const supabaseKey = (supabase as any).supabaseKey || '';
-      
-      // If the above doesn't work, you can also get them from the session
-      const { data: { session } } = await supabase.auth.getSession();
-      const authToken = session?.access_token || supabaseKey;
-      
-      // Upload using fetch with FormData
-      const uploadResponse = await fetch(
-        `${supabaseUrl}/storage/v1/object/images/${fileName}`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: formData,
-        }
-      );
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error('Upload failed:', errorText);
-        Alert.alert('Error', 'Failed to upload image. Please try again.');
-        setUploadingImage(false);
-        return;
+ const uploadImage = async (uri: string) => {
+  setUploadingImage(true);
+  try {
+    console.log('Starting image upload for:', uri);
+    
+    const formData = new FormData();
+    
+    const fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
+    const userId = email.replace(/[@.]/g, '-');
+    const fileName = `farmer_profile_pictures/${userId}/profile-${Date.now()}.${fileExtension}`;
+    
+    const file = {
+      uri: uri,
+      type: `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`,
+      name: fileName.split('/').pop() || 'profile.jpg',
+    } as any;
+    
+    formData.append('file', file);
+    
+    console.log('Uploading file:', fileName);
+    
+    // FIXED: Use the supabase anon key directly
+    const supabaseUrl = 'https://xzouepokakzubwjogmdr.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6b3VlcG9rYWt6dWJ3am9nbWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyODY3MTUsImV4cCI6MjA4MDg2MjcxNX0.kqvEprlsrAmFt6qYTNDPvhWpAsLJJU_oKf-kIhlf2bc';
+    
+    // Upload using fetch with FormData
+    const uploadResponse = await fetch(
+      `${supabaseUrl}/storage/v1/object/images/${fileName}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${supabaseAnonKey}`, 
+        },
+        body: formData,
       }
+    );
 
-      console.log('Upload successful');
-      
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('images')
-        .getPublicUrl(fileName);
-
-      console.log('Public URL:', publicUrl);
-      
-      // Wait a moment for the file to be fully available
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Save the profile picture URL to the database
-      const { error: dbError } = await supabase
-        .from('user_profiles')
-        .upsert({
-          email: profile.email,
-          name: profile.name.trim() || 'Farmer',
-          phone_number: profile.contactNumber.trim() || '',
-          profile_picture: publicUrl,
-        }, {
-          onConflict: 'email'
-        });
-
-      if (dbError) {
-        console.error('Database error:', dbError);
-        Alert.alert('Error', 'Image uploaded but failed to save to profile');
-        setUploadingImage(false);
-        return;
-      }
-      
-      // Update local state
-      setProfile({ ...profile, profilePicture: publicUrl });
-      
-      Alert.alert('Success', 'Profile picture updated successfully');
-    } catch (error) {
-      console.error('Upload error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      Alert.alert('Error', `Failed to upload image: ${errorMessage}`);
-    } finally {
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.error('Upload failed:', errorText);
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
       setUploadingImage(false);
+      return;
     }
-  };
+
+    console.log('Upload successful');
+    
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('images')
+      .getPublicUrl(fileName);
+
+    console.log('Public URL:', publicUrl);
+    
+    // Wait a moment for the file to be fully available
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Save the profile picture URL to the database
+    const { error: dbError } = await supabase
+      .from('user_profiles')
+      .upsert({
+        email: profile.email,
+        name: profile.name.trim() || 'Farmer',
+        phone_number: profile.contactNumber.trim() || '',
+        profile_picture: publicUrl,
+      }, {
+        onConflict: 'email'
+      });
+
+    if (dbError) {
+      console.error('Database error:', dbError);
+      Alert.alert('Error', 'Image uploaded but failed to save to profile');
+      setUploadingImage(false);
+      return;
+    }
+    
+    // Update local state
+    setProfile({ ...profile, profilePicture: publicUrl });
+    
+    Alert.alert('Success', 'Profile picture updated successfully');
+  } catch (error) {
+    console.error('Upload error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    Alert.alert('Error', `Failed to upload image: ${errorMessage}`);
+  } finally {
+    setUploadingImage(false);
+  }
+};
 
   if (loading) {
     return (
@@ -687,6 +749,17 @@ export default function FarmerProfileScreen() {
           {showFarmSection && (
             <View style={styles.farmSection}>
               <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Farm Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={farmName}
+                  onChangeText={setFarmName}
+                  placeholder="Enter farm name"
+                  placeholderTextColor={colors.brandGrayText}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Farm Location</Text>
                 <TextInput
                   style={styles.input}
@@ -704,18 +777,6 @@ export default function FarmerProfileScreen() {
                   value={areaSize}
                   onChangeText={setAreaSize}
                   placeholder="Enter area size"
-                  placeholderTextColor={colors.brandGrayText}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Flow Rate (L/min)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={flowRate}
-                  onChangeText={setFlowRate}
-                  placeholder="Enter flow rate"
                   placeholderTextColor={colors.brandGrayText}
                   keyboardType="numeric"
                 />
@@ -1043,6 +1104,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontFamily: fonts.regular,
     fontSize: 15,
+    letterSpacing: 0,
     color: '#1F2937',
     backgroundColor: '#fff',
   },

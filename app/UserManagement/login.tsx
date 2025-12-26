@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
   },
   forgotText: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.brandBlue,
   },
   loginButton: {
@@ -536,12 +536,12 @@ const styles = StyleSheet.create({
   },
   inlineFooterText: {
     fontFamily: fonts.regular,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.brandGrayText,
   },
   inlineFooterLink: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.brandBlue,
   },
   loadingOverlay: {
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
   sendButton: {
     backgroundColor: colors.brandGreen,
     borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
@@ -679,7 +679,7 @@ const styles = StyleSheet.create({
   },
   resendButtonText: {
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 14,
     color: colors.brandBlue,
     textAlign: 'center',
   },
