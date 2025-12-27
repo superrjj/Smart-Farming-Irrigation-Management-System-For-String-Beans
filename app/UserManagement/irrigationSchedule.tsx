@@ -1,14 +1,17 @@
 import { FontAwesome } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState, useEffect } from 'react';
 import {
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  Modal,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '@/lib/supabase';
 
 const colors = {
   primary: '#22C55E',
@@ -35,16 +38,6 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-// Mock schedule data
-const SCHEDULED_TIMES = [
-  { id: 1, time: '08:00 AM', enabled: true },
-  { id: 2, time: '10:00 AM', enabled: true },
-  { id: 3, time: '12:00 NN', enabled: true },
-];
-
-// Mock scheduled dates (days of month that have irrigation scheduled)
-const SCHEDULED_DATES = [20, 21, 22];
-
 function getDaysInMonth(month: number, year: number) {
   return new Date(year, month + 1, 0).getDate();
 }
@@ -54,17 +47,34 @@ function getFirstDayOfMonth(month: number, year: number) {
 }
 
 export default function IrrigationScheduleScreen() {
+  const params = useLocalSearchParams<{ email?: string }>();
+  const email = typeof params.email === 'string' ? params.email : '';
   const router = useRouter();
   const today = new Date();
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [selectedDates, setSelectedDates] = useState<number[]>(SCHEDULED_DATES);
-  const [schedules, setSchedules] = useState(SCHEDULED_TIMES);
+  const [selectedDates, setSelectedDates] = useState<number[]>([]);
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [addScheduleModalVisible, setAddScheduleModalVisible] = useState(false);
+  const [newScheduleTime, setNewScheduleTime] = useState('08:00');
+  const [newSchedulePeriod, setNewSchedulePeriod] = useState<'AM' | 'PM'>('AM');
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [selectedHour, setSelectedHour] = useState('08');
+  const [selectedMinute, setSelectedMinute] = useState('00');
+  const [loading, setLoading] = useState(true);
+  const [currentScheduleId, setCurrentScheduleId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  const hours = Array.from({length: 12}, (_, i) => String(i + 1).padStart(2, '0'));
+  const minutes = Array.from({length: 60}, (_, i) => String(i).padStart(2, '0'));
 
   const daysInMonth = getDaysInMonth(currentMonth, currentYear);
   const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
 
-  // Generate calendar days array
+  const visibleSchedules = schedules.slice(0, 2);
+  const hasMore = schedules.length > 2;
+
   const calendarDays: (number | null)[] = [];
   for (let i = 0; i < firstDay; i++) {
     calendarDays.push(null);
@@ -73,7 +83,148 @@ export default function IrrigationScheduleScreen() {
     calendarDays.push(i);
   }
 
+  // Fetch user session
+  useEffect(() => {
+    fetchUserSession();
+  }, [email]);
+
+  // Fetch schedules when user is loaded
+  useEffect(() => {
+    if (userId) {
+      fetchOrCreateSchedule();
+    }
+  }, [userId, currentMonth, currentYear]);
+
+  const fetchUserSession = async () => {
+    if (!email) {
+      Alert.alert('Error', 'No email provided');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Get user ID from user_profiles table using email
+      const { data: userData, error } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (error || !userData) {
+        console.error('Error fetching user:', error);
+        Alert.alert('Error', 'User not found');
+        setLoading(false);
+        return;
+      }
+
+      setUserId(userData.id);
+      console.log('Loaded user ID:', userData.id);
+    } catch (error) {
+      console.error('Error fetching user session:', error);
+      Alert.alert('Error', 'Failed to load user session');
+      setLoading(false);
+    }
+  };
+
+  const fetchOrCreateSchedule = async () => {
+    if (!userId) return;
+    
+    setLoading(true);
+    try {
+      // Check if schedule exists
+      const { data: existingSchedule, error: scheduleError } = await supabase
+        .from('irrigation_schedules')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (scheduleError && scheduleError.code !== 'PGRST116') {
+        throw scheduleError;
+      }
+
+      let scheduleId = existingSchedule?.id;
+
+      // Create schedule if it doesn't exist
+      if (!existingSchedule) {
+        const { data: newSchedule, error: createError } = await supabase
+          .from('irrigation_schedules')
+          .insert({
+            user_id: userId,
+            schedule_name: 'My Irrigation Schedule',
+            is_active: true
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        scheduleId = newSchedule.id;
+        console.log('Created new schedule:', scheduleId);
+      }
+
+      setCurrentScheduleId(scheduleId);
+      
+      // Fetch time schedules
+      await fetchTimeSchedules(scheduleId);
+      
+      // Fetch scheduled dates for current month
+      await fetchScheduledDates(scheduleId);
+      
+    } catch (error) {
+      console.error('Error fetching schedule:', error);
+      Alert.alert('Error', 'Failed to load irrigation schedule');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTimeSchedules = async (scheduleId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('irrigation_time_schedules')
+        .select('*')
+        .eq('schedule_id', scheduleId)
+        .order('time');
+
+      if (error) throw error;
+      
+      console.log('Fetched time schedules:', data);
+      setSchedules(data || []);
+    } catch (error) {
+      console.error('Error fetching time schedules:', error);
+    }
+  };
+
+  const fetchScheduledDates = async (scheduleId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('irrigation_scheduled_dates')
+        .select('day')
+        .eq('schedule_id', scheduleId)
+        .eq('month', currentMonth + 1)
+        .eq('year', currentYear);
+
+      if (error) throw error;
+      
+      console.log('Fetched scheduled dates:', data);
+      setSelectedDates(data?.map(d => d.day) || []);
+    } catch (error) {
+      console.error('Error fetching scheduled dates:', error);
+    }
+  };
+
+  const canGoPrevMonth = () => {
+    const currentDate = new Date();
+    const prevMonthDate = currentMonth === 0 
+      ? new Date(currentYear - 1, 11) 
+      : new Date(currentYear, currentMonth - 1);
+    const todayMonth = new Date(currentDate.getFullYear(), currentDate.getMonth());
+    return prevMonthDate >= todayMonth;
+  };
+
   const goToPrevMonth = () => {
+    if (!canGoPrevMonth()) return;
+    
     if (currentMonth === 0) {
       setCurrentMonth(11);
       setCurrentYear(currentYear - 1);
@@ -91,11 +242,56 @@ export default function IrrigationScheduleScreen() {
     }
   };
 
-  const toggleDate = (day: number) => {
-    if (selectedDates.includes(day)) {
-      setSelectedDates(selectedDates.filter(d => d !== day));
-    } else {
-      setSelectedDates([...selectedDates, day]);
+  const isPastDate = (day: number) => {
+    const selectedDate = new Date(currentYear, currentMonth, day);
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    selectedDate.setHours(0, 0, 0, 0);
+    return selectedDate < todayDate;
+  };
+
+  const toggleDate = async (day: number) => {
+    if (!currentScheduleId) return;
+    
+    const selectedDate = new Date(currentYear, currentMonth, day);
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    if (selectedDate < todayDate) return;
+    
+    try {
+      if (selectedDates.includes(day)) {
+        // Remove date
+        const { error } = await supabase
+          .from('irrigation_scheduled_dates')
+          .delete()
+          .eq('schedule_id', currentScheduleId)
+          .eq('day', day)
+          .eq('month', currentMonth + 1)
+          .eq('year', currentYear);
+
+        if (error) throw error;
+        setSelectedDates(selectedDates.filter(d => d !== day));
+      } else {
+        // Add date
+        const scheduledDate = new Date(currentYear, currentMonth, day);
+        const { error } = await supabase
+          .from('irrigation_scheduled_dates')
+          .insert({
+            schedule_id: currentScheduleId,
+            scheduled_date: scheduledDate.toISOString().split('T')[0],
+            month: currentMonth + 1,
+            year: currentYear,
+            day: day
+          });
+
+        if (error) throw error;
+        setSelectedDates([...selectedDates, day]);
+      }
+    } catch (error) {
+      console.error('Error toggling date:', error);
+      Alert.alert('Error', 'Failed to update scheduled date');
     }
   };
 
@@ -107,15 +303,123 @@ export default function IrrigationScheduleScreen() {
     );
   };
 
-  const handleAddSchedule = () => {
-    // TODO: Implement add schedule modal/screen
-    console.log('Add new schedule');
+  const canSaveSchedule = () => {
+    const hasSelectedDates = selectedDates.length > 0;
+    const hasEnabledSchedules = schedules.some(schedule => schedule.enabled);
+    return hasSelectedDates && hasEnabledSchedules;
   };
+
+  const toggleSchedule = async (id: string) => {
+    try {
+      const schedule = schedules.find(s => s.id === id);
+      if (!schedule) return;
+
+      const { error } = await supabase
+        .from('irrigation_time_schedules')
+        .update({ enabled: !schedule.enabled })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setSchedules(schedules.map(s => 
+        s.id === id ? { ...s, enabled: !s.enabled } : s
+      ));
+    } catch (error) {
+      console.error('Error toggling schedule:', error);
+      Alert.alert('Error', 'Failed to update schedule');
+    }
+  };
+
+  const deleteSchedule = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('irrigation_time_schedules')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setSchedules(schedules.filter(s => s.id !== id));
+      Alert.alert('Success', 'Schedule deleted');
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      Alert.alert('Error', 'Failed to delete schedule');
+    }
+  };
+
+  const addNewSchedule = async () => {
+    if (!currentScheduleId || !newScheduleTime.trim()) return;
+
+    try {
+      const timeString = `${newScheduleTime.trim()} ${newSchedulePeriod}`;
+      
+      const { data, error } = await supabase
+        .from('irrigation_time_schedules')
+        .insert({
+          schedule_id: currentScheduleId,
+          time: timeString,
+          enabled: true
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      console.log('Added new schedule:', data);
+      setSchedules([...schedules, data]);
+      setNewScheduleTime('08:00');
+      setNewSchedulePeriod('AM');
+      setSelectedHour('08');
+      setSelectedMinute('00');
+      setShowTimePicker(false);
+      setAddScheduleModalVisible(false);
+      Alert.alert('Success', 'Schedule added successfully!');
+    } catch (error) {
+      console.error('Error adding schedule:', error);
+      Alert.alert('Error', 'Failed to add schedule');
+    }
+  };
+
+  const handleSelectHour = (hour: string) => {
+    setSelectedHour(hour);
+    setNewScheduleTime(`${hour}:${selectedMinute}`);
+  };
+
+  const handleSelectMinute = (minute: string) => {
+    setSelectedMinute(minute);
+    setNewScheduleTime(`${selectedHour}:${minute}`);
+  };
+
+  const handleConfirmTime = () => {
+    setNewScheduleTime(`${selectedHour}:${selectedMinute}`);
+    setShowTimePicker(false);
+  };
+
+  const handleCancelTime = () => {
+    setShowTimePicker(false);
+    const [hour, minute] = newScheduleTime.split(':');
+    setSelectedHour(hour);
+    setSelectedMinute(minute);
+  };
+
+  const saveSchedule = async () => {
+    if (!canSaveSchedule()) return;
+    
+    Alert.alert('Success', 'Irrigation schedule saved successfully!');
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <Text style={styles.timeText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Top App Bar */}
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <FontAwesome name="chevron-left" size={18} color={colors.dark} />
@@ -123,9 +427,6 @@ export default function IrrigationScheduleScreen() {
 
           <View style={styles.titleRow}>
             <Text style={styles.topBarTitle}>IRRIGATION SCHEDULE</Text>
-            <TouchableOpacity onPress={handleAddSchedule} style={styles.addIconButton}>
-              <FontAwesome name="plus" size={16} color={colors.primary} />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.placeholder} />
@@ -136,18 +437,7 @@ export default function IrrigationScheduleScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
 
-          {/* Hero / Status */}
           <View style={styles.heroCard}>
-            <View style={styles.heroHeader}>
-              <View>
-                <Text style={styles.heroTitle}>Healthy String Beans</Text>
-                <Text style={styles.heroSubtitle}>Keep soil moisture balanced</Text>
-              </View>
-              <TouchableOpacity style={styles.heroCTA} onPress={handleAddSchedule}>
-                <FontAwesome name="plus" size={14} color={colors.white} />
-                <Text style={styles.heroCTAText}>Add Schedule</Text>
-              </TouchableOpacity>
-            </View>
             <View style={styles.heroStats}>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>Scheduled days</Text>
@@ -155,46 +445,91 @@ export default function IrrigationScheduleScreen() {
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statLabel}>Next watering</Text>
-                <Text style={styles.statValue}>08:00 AM</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Mode</Text>
-                <Text style={styles.statValue}>Smart</Text>
+                <Text style={styles.statValue}>
+                  {schedules.find(s => s.enabled)?.time || '--'}
+                </Text>
               </View>
             </View>
           </View>
 
-          {/* Time Schedule Card */}
           <View style={styles.timeScheduleCard}>
-            <View style={styles.timeScheduleLeft}>
-              <Text style={styles.timeScheduleTitle}>Time schedule</Text>
-              <Text style={styles.timeScheduleSubtitle}>
-                Toggle or adjust irrigation slots
-              </Text>
+            <View style={styles.timeScheduleHeader}>
+              <View style={styles.timeScheduleTitleRow}>
+                <Text style={styles.timeScheduleTitle}>Time schedule</Text>
+                {schedules.length > 0 && (
+                  <TouchableOpacity 
+                    style={styles.addTimeButton}
+                    onPress={() => setAddScheduleModalVisible(true)}
+                  >
+                    <FontAwesome name="plus" size={14} color={colors.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
+            
             <View style={styles.timeScheduleRight}>
-              {schedules.map((schedule) => (
-                <View key={schedule.id} style={styles.timeRow}>
-                  <Text style={styles.timeText}>{schedule.time}</Text>
-                  <TouchableOpacity style={styles.timeToggle}>
-                    <FontAwesome
-                      name={schedule.enabled ? 'toggle-on' : 'toggle-off'}
-                      size={20}
-                      color={schedule.enabled ? colors.primary : colors.grayText}
-                    />
+              {schedules.length === 0 ? (
+                <View style={styles.noSchedulesContainer}>
+                  <Text style={styles.noSchedulesText}>No time schedules available</Text>
+                  <TouchableOpacity 
+                    style={styles.addScheduleButton}
+                    onPress={() => setAddScheduleModalVisible(true)}
+                  >
+                    <FontAwesome name="plus" size={16} color={colors.primary} />
+                    <Text style={styles.addScheduleText}>Add Schedule</Text>
                   </TouchableOpacity>
                 </View>
-              ))}
+              ) : (
+                <>
+                  {visibleSchedules.map((schedule) => (
+                    <View key={schedule.id} style={styles.timeRow}>
+                      <Text style={styles.timeText}>{schedule.time}</Text>
+                      <View style={styles.timeActions}>
+                        <TouchableOpacity 
+                          style={styles.timeToggle} 
+                          onPress={() => toggleSchedule(schedule.id)}
+                        >
+                          <FontAwesome
+                            name={schedule.enabled ? 'check-circle' : 'circle-o'}
+                            size={20}
+                            color={schedule.enabled ? colors.primary : colors.grayText}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.timeDelete}
+                          onPress={() => deleteSchedule(schedule.id)}
+                        >
+                          <FontAwesome name="trash" size={16} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                  
+                  {hasMore && (
+                    <TouchableOpacity 
+                      style={styles.seeMoreButton}
+                      onPress={() => setModalVisible(true)}
+                    >
+                      <Text style={styles.seeMoreText}>
+                        See more ({schedules.length - 2} more)
+                      </Text>
+                      <FontAwesome name="chevron-down" size={12} color={colors.primary} />
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
             </View>
           </View>
 
-          {/* Calendar Section */}
           <View style={styles.calendarSection}>
-            {/* Month Navigation */}
             <View style={styles.monthNav}>
-              <TouchableOpacity onPress={goToPrevMonth} style={styles.navButton}>
-                <FontAwesome name="chevron-left" size={16} color={colors.grayText} />
-              </TouchableOpacity>
+              {canGoPrevMonth() ? (
+                <TouchableOpacity onPress={goToPrevMonth} style={styles.navButton}>
+                  <FontAwesome name="chevron-left" size={16} color={colors.grayText} />
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.navButton, styles.navButtonDisabled]} />
+              )}
               <Text style={styles.monthTitle}>
                 {MONTHS[currentMonth].toUpperCase()}
               </Text>
@@ -203,10 +538,8 @@ export default function IrrigationScheduleScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Year */}
             <Text style={styles.yearText}>{currentYear}</Text>
 
-            {/* Day Headers */}
             <View style={styles.dayHeaders}>
               {DAYS.map((day) => (
                 <Text key={day} style={styles.dayHeader}>
@@ -215,13 +548,12 @@ export default function IrrigationScheduleScreen() {
               ))}
             </View>
 
-            {/* Calendar Grid */}
             <View style={styles.calendarGrid}>
               {calendarDays.map((day, index) => {
                 const isSelected = day !== null && selectedDates.includes(day);
                 const isTodayDate = day !== null && isToday(day);
+                const isPast = day !== null && isPastDate(day);
                 
-                // Check if this date is part of a consecutive selection
                 const isPrevSelected = day !== null && selectedDates.includes(day - 1);
                 const isNextSelected = day !== null && selectedDates.includes(day + 1);
                 const isMiddle = isPrevSelected && isNextSelected;
@@ -239,15 +571,17 @@ export default function IrrigationScheduleScreen() {
                       isStart && styles.startDay,
                       isEnd && styles.endDay,
                       isSingle && styles.singleDay,
+                      isPast && styles.pastDay,
                     ]}
                     onPress={() => day && toggleDate(day)}
-                    disabled={day === null}>
+                    disabled={day === null || isPast}>
                     <Text
                       style={[
                         styles.dayText,
                         day === null && styles.emptyDay,
                         isSelected && styles.selectedDayText,
                         isTodayDate && !isSelected && styles.todayText,
+                        isPast && styles.pastDayText,
                       ]}>
                       {day || ''}
                     </Text>
@@ -257,7 +591,6 @@ export default function IrrigationScheduleScreen() {
             </View>
           </View>
 
-          {/* Legend */}
           <View style={styles.legend}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
@@ -269,17 +602,22 @@ export default function IrrigationScheduleScreen() {
             </View>
           </View>
 
-          {/* Quick Actions */}
           <View style={styles.quickActions}>
-            <TouchableOpacity style={styles.quickActionButton}>
+            <TouchableOpacity 
+              style={styles.quickActionButton}
+              onPress={() => setAddScheduleModalVisible(true)}
+            >
               <FontAwesome name="clock-o" size={18} color={colors.primary} />
-              <Text style={styles.quickActionText}>Edit Times</Text>
+              <Text style={styles.quickActionText}>Add Time</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.quickActionButton}>
               <FontAwesome name="calendar-check-o" size={18} color={colors.primary} />
               <Text style={styles.quickActionText}>Select All</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionButton}>
+            <TouchableOpacity 
+              style={styles.quickActionButton}
+              onPress={() => setSelectedDates([])}
+            >
               <FontAwesome name="trash-o" size={18} color="#EF4444" />
               <Text style={[styles.quickActionText, { color: '#EF4444' }]}>Clear</Text>
             </TouchableOpacity>
@@ -287,7 +625,6 @@ export default function IrrigationScheduleScreen() {
 
         </ScrollView>
 
-        {/* Footer */}
         <View style={styles.footer}>
           <View style={styles.footerInfo}>
             <FontAwesome name="info-circle" size={16} color={colors.grayText} />
@@ -295,10 +632,209 @@ export default function IrrigationScheduleScreen() {
               {selectedDates.length} days scheduled this month
             </Text>
           </View>
-          <TouchableOpacity style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Save Schedule</Text>
+          <TouchableOpacity 
+            style={[
+              styles.saveButton,
+              !canSaveSchedule() && styles.saveButtonDisabled
+            ]}
+            disabled={!canSaveSchedule()}
+            onPress={saveSchedule}
+          >
+            <Text style={[
+              styles.saveButtonText,
+              !canSaveSchedule() && styles.saveButtonTextDisabled
+            ]}>Save Schedule</Text>
           </TouchableOpacity>
         </View>
+
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>All Time Schedules</Text>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <FontAwesome name="times" size={24} color={colors.dark} />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.modalScroll}>
+                {schedules.map((schedule) => (
+                  <View key={schedule.id} style={styles.modalTimeRow}>
+                    <Text style={styles.timeText}>{schedule.time}</Text>
+                    <View style={styles.timeActions}>
+                      <TouchableOpacity 
+                        style={styles.timeToggle} 
+                        onPress={() => toggleSchedule(schedule.id)}
+                      >
+                        <FontAwesome
+                          name={schedule.enabled ? 'check-circle' : 'circle-o'}
+                          size={20}
+                          color={schedule.enabled ? colors.primary : colors.grayText}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.timeDelete}
+                        onPress={() => deleteSchedule(schedule.id)}
+                      >
+                        <FontAwesome name="trash" size={16} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.modalCloseText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={addScheduleModalVisible}
+          onRequestClose={() => setAddScheduleModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.addScheduleModalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add Time Schedule</Text>
+                <TouchableOpacity onPress={() => setAddScheduleModalVisible(false)}>
+                  <FontAwesome name="times" size={24} color={colors.dark} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.timeInputContainer}>
+                <Text style={styles.inputLabel}>Time</Text>
+                <View style={styles.timeInputRow}>
+                  <TouchableOpacity 
+                    style={styles.timeSelector}
+                    onPress={() => setShowTimePicker(!showTimePicker)}
+                  >
+                    <Text style={styles.timeSelectorText}>{newScheduleTime}</Text>
+                    <FontAwesome name="chevron-down" size={12} color={colors.grayText} />
+                  </TouchableOpacity>
+                  <View style={styles.periodButtons}>
+                    <TouchableOpacity
+                      style={[
+                        styles.periodButton,
+                        newSchedulePeriod === 'AM' && styles.periodButtonActive
+                      ]}
+                      onPress={() => setNewSchedulePeriod('AM')}
+                    >
+                      <Text style={[
+                        styles.periodButtonText,
+                        newSchedulePeriod === 'AM' && styles.periodButtonTextActive
+                      ]}>AM</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.periodButton,
+                        newSchedulePeriod === 'PM' && styles.periodButtonActive
+                      ]}
+                      onPress={() => setNewSchedulePeriod('PM')}
+                    >
+                      <Text style={[
+                        styles.periodButtonText,
+                        newSchedulePeriod === 'PM' && styles.periodButtonTextActive
+                      ]}>PM</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                
+                {showTimePicker && (
+                  <View style={styles.timePickerWrapper}>
+                    <View style={styles.timePickerContainer}>
+                      <View style={styles.timePickerColumn}>
+                        <Text style={styles.timePickerLabel}>Hour</Text>
+                        <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                          {hours.map((hour) => (
+                            <TouchableOpacity
+                              key={hour}
+                              style={[
+                                styles.timePickerOption,
+                                selectedHour === hour && styles.timePickerOptionSelected
+                              ]}
+                              onPress={() => handleSelectHour(hour)}
+                            >
+                              <Text style={[
+                                styles.timePickerOptionText,
+                                selectedHour === hour && styles.timePickerOptionTextSelected
+                              ]}>{hour}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                      
+                      <View style={styles.timePickerColumn}>
+                        <Text style={styles.timePickerLabel}>Minute</Text>
+                        <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                          {minutes.map((minute) => (
+                            <TouchableOpacity
+                              key={minute}
+                              style={[
+                                styles.timePickerOption,
+                                selectedMinute === minute && styles.timePickerOptionSelected
+                              ]}
+                              onPress={() => handleSelectMinute(minute)}
+                            >
+                              <Text style={[
+                                styles.timePickerOptionText,
+                                selectedMinute === minute && styles.timePickerOptionTextSelected
+                              ]}>{minute}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.timePickerActions}>
+                      <TouchableOpacity 
+                        style={styles.timePickerCancelButton}
+                        onPress={handleCancelTime}
+                      >
+                        <Text style={styles.timePickerCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.timePickerConfirmButton}
+                        onPress={handleConfirmTime}
+                      >
+                        <Text style={styles.timePickerConfirmText}>Confirm</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {!showTimePicker && (
+                <View style={styles.addScheduleModalActions}>
+                  <TouchableOpacity 
+                    style={styles.cancelButton}
+                    onPress={() => setAddScheduleModalVisible(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.addButton}
+                    onPress={addNewSchedule}
+                  >
+                    <Text style={styles.addButtonText}>Save Schedule</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+
       </View>
     </SafeAreaView>
   );
@@ -342,14 +878,6 @@ const styles = StyleSheet.create({
     color: colors.dark,
     letterSpacing: 0.5,
   },
-  addIconButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.grayLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   placeholder: {
     width: 32,
   },
@@ -372,36 +900,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
     gap: 12,
-  },
-  heroHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  heroTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 18,
-    color: colors.dark,
-  },
-  heroSubtitle: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.grayText,
-    marginTop: 2,
-  },
-  heroCTA: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 24,
-  },
-  heroCTAText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.white,
   },
   heroStats: {
     flexDirection: 'row',
@@ -428,34 +926,40 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   timeScheduleCard: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     backgroundColor: colors.white,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.grayBorder,
     padding: 16,
-    gap: 24,
+    gap: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 3,
   },
-  timeScheduleLeft: {
-    justifyContent: 'center',
-    width: 140,
+  timeScheduleHeader: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  timeScheduleTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  addTimeButton: {
+    padding: 6,
+    borderRadius: 15,
+    backgroundColor: colors.primaryLight,
   },
   timeScheduleTitle: {
     fontFamily: fonts.bold,
     fontSize: 18,
     color: colors.dark,
+    textAlign: 'center',
     lineHeight: 24,
-  },
-  timeScheduleSubtitle: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.grayText,
-    marginTop: 4,
   },
   timeScheduleRight: {
     flex: 1,
@@ -477,6 +981,56 @@ const styles = StyleSheet.create({
   },
   timeToggle: {
     padding: 4,
+  },
+  timeActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeDelete: {
+    padding: 4,
+  },
+  seeMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 10,
+    gap: 6,
+  },
+  seeMoreText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.primaryDark,
+  },
+  noSchedulesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  noSchedulesText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.grayText,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  addScheduleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 10,
+  },
+  addScheduleText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.primaryDark,
   },
   calendarSection: {
     backgroundColor: colors.white,
@@ -501,6 +1055,13 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: colors.grayLight,
     borderRadius: 10,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navButtonDisabled: {
+    backgroundColor: 'transparent',
   },
   monthTitle: {
     fontFamily: fonts.bold,
@@ -579,6 +1140,14 @@ const styles = StyleSheet.create({
   todayText: {
     color: colors.accent,
     fontFamily: fonts.bold,
+  },
+  pastDay: {
+    backgroundColor: '#F7F7F7',
+    opacity: 1,
+  },
+  pastDayText: {
+    color: '#D1D5DB',
+    opacity: 1,
   },
   legend: {
     flexDirection: 'row',
@@ -659,5 +1228,229 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.white,
   },
+  saveButtonDisabled: {
+    backgroundColor: colors.grayText,
+  },
+  saveButtonTextDisabled: {
+    color: colors.grayLight,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    color: colors.dark,
+  },
+  modalScroll: {
+    maxHeight: 400,
+  },
+  modalTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: colors.grayLight,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  modalCloseButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  modalCloseText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: colors.white,
+  },
+  addScheduleModalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+  },
+  timeInputContainer: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    color: colors.dark,
+    marginBottom: 12,
+  },
+  timeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timeSelector: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.grayBorder,
+    borderRadius: 10,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timeSelectorText: {
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    color: colors.dark,
+  },
+  timePickerWrapper: {
+    marginTop: 12,
+  },
+  timePickerContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: colors.grayLight,
+    borderRadius: 10,
+    padding: 12,
+  },
+  timePickerColumn: {
+    flex: 1,
+  },
+  timePickerLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.grayText,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  timePickerScroll: {
+    maxHeight: 120,
+  },
+  timePickerOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.white,
+    borderRadius: 6,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: colors.grayBorder,
+  },
+  timePickerOptionSelected: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+  },
+  timePickerOptionText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.dark,
+    textAlign: 'center',
+  },
+  timePickerOptionTextSelected: {
+    color: colors.primaryDark,
+    fontFamily: fonts.semibold,
+  },
+  timePickerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  timePickerCancelButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: colors.grayLight,
+    borderWidth: 1,
+    borderColor: colors.grayBorder,
+  },
+  timePickerCancelText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.grayText,
+  },
+  timePickerConfirmButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+  },
+  timePickerConfirmText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.white,
+  },
+  periodButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  periodButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: colors.grayLight,
+    borderWidth: 1,
+    borderColor: colors.grayBorder,
+  },
+  periodButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  periodButtonText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.grayText,
+  },
+  periodButtonTextActive: {
+    color: colors.white,
+  },
+  addScheduleModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.grayLight,
+    borderWidth: 1,
+    borderColor: colors.grayBorder,
+  },
+  cancelButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: colors.grayText,
+  },
+  addButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+  },
+  addButtonText: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: colors.white,
+  },
 });
-
