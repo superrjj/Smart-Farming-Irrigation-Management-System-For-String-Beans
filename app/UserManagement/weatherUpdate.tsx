@@ -1,14 +1,19 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
+import { getWeatherData } from '../../lib/weatherConfig';
 
 const colors = {
   brandBlue: '#007AFF',
@@ -26,15 +31,152 @@ const fonts = {
   bold: 'Poppins_700Bold',
 };
 
-const FORECAST = [
-  { day: 'Today', temp: '28°', icon: 'sun-o' },
-  { day: 'Tue', temp: '29°', icon: 'cloud' },
-  { day: 'Wed', temp: '30°', icon: 'umbrella' },
-  { day: 'Thu', temp: '27°', icon: 'sun-o' },
-];
+// Tarlac City boundaries (approximate)
+const TARLAC_CITY_BOUNDS = {
+  minLat: 15.35,
+  maxLat: 15.62,
+  minLon: 120.50,
+  maxLon: 120.70,
+};
 
 export default function WeatherUpdateScreen() {
   const router = useRouter();
+  const [weatherData, setWeatherData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [locationName, setLocationName] = useState<string>('Tarlac City');
+
+  useEffect(() => {
+    loadWeatherWithLocation();
+  }, []);
+
+  async function loadWeatherWithLocation() {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Request location permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        console.log('Permission denied, using default Tarlac City coordinates');
+        await loadWeatherForDefaultLocation();
+        return;
+      }
+
+      // Get current location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const { latitude, longitude } = location.coords;
+
+      // Check if within Tarlac City bounds
+      const isInTarlacCity = 
+        latitude >= TARLAC_CITY_BOUNDS.minLat &&
+        latitude <= TARLAC_CITY_BOUNDS.maxLat &&
+        longitude >= TARLAC_CITY_BOUNDS.minLon &&
+        longitude <= TARLAC_CITY_BOUNDS.maxLon;
+
+      if (!isInTarlacCity) {
+        Alert.alert(
+          'Outside Tarlac City',
+          'Your current location is outside Tarlac City. Showing weather for Tarlac City center instead.',
+          [{ text: 'OK' }]
+        );
+        await loadWeatherForDefaultLocation();
+        return;
+      }
+
+      // Reverse geocode to get address (barangay name)
+      try {
+        const addresses = await Location.reverseGeocodeAsync({
+          latitude,
+          longitude,
+        });
+
+        if (addresses && addresses.length > 0) {
+          const address = addresses[0];
+          // Format: "Barangay Name, Tarlac City"
+          const locationText = address.district 
+            ? `${address.district}, Tarlac City`
+            : address.subregion || 'Tarlac City';
+          setLocationName(locationText);
+        }
+      } catch (geocodeError) {
+        console.log('Geocoding failed, using coordinates:', geocodeError);
+        setLocationName(`${latitude.toFixed(4)}°N, ${longitude.toFixed(4)}°E`);
+      }
+
+      // Fetch weather data for current location
+      const data = await getWeatherData(latitude, longitude);
+      setWeatherData(data);
+
+    } catch (err) {
+      console.error('Failed to load weather:', err);
+      setError('Failed to load weather data');
+      // Fallback to default location
+      await loadWeatherForDefaultLocation();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadWeatherForDefaultLocation() {
+    try {
+      const data = await getWeatherData(); // Uses default Tarlac City center
+      setWeatherData(data);
+      setLocationName('Tarlac City (Center)');
+    } catch (err) {
+      console.error('Failed to load default weather:', err);
+      setError('Failed to load weather data');
+    }
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color={colors.brandBlue} />
+          <Text style={styles.loadingText}>Getting your location...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !weatherData) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, styles.centerContent]}>
+          <FontAwesome name="exclamation-triangle" size={48} color={colors.brandGrayText} />
+          <Text style={styles.errorText}>{error || 'No weather data available'}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={loadWeatherWithLocation}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Get forecast for next 4 days including today
+  const forecastDays = [];
+  const today = new Date();
+  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  for (let i = 0; i < 4; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+    const dayName = i === 0 ? 'Today' : daysOfWeek[date.getDay()];
+    forecastDays.push(dayName);
+  }
+  
+  const forecast = forecastDays.map((day, idx) => ({
+    day,
+    temp: `${Math.round(weatherData.daily.temperature_2m_max[idx])}°`,
+    icon: getWeatherIcon(weatherData.daily.weather_code[idx]),
+  }));
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -48,11 +190,10 @@ export default function WeatherUpdateScreen() {
           <Text style={styles.topBarTitle}>Weather Update</Text>
 
           <View style={styles.topBarRight}>
-            <TouchableOpacity style={styles.iconButton}>
-              <FontAwesome name="search" size={18} color="#000" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
-              <FontAwesome name="bell-o" size={18} color="#000" />
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={loadWeatherWithLocation}>
+              <FontAwesome name="location-arrow" size={18} color="#000" />
             </TouchableOpacity>
           </View>
         </View>
@@ -63,7 +204,12 @@ export default function WeatherUpdateScreen() {
           showsVerticalScrollIndicator={false}>
           {/* Location row */}
           <View style={styles.locationRow}>
-            <Text style={styles.locationText}>Dalayap, Tarlac City</Text>
+            <View>
+              <Text style={styles.locationText}>{locationName}</Text>
+              <Text style={styles.locationCoords}>
+                {weatherData.latitude.toFixed(4)}°N, {weatherData.longitude.toFixed(4)}°E
+              </Text>
+            </View>
             <View style={styles.locationRight}>
               <FontAwesome name="map-marker" size={16} color={colors.brandBlue} />
             </View>
@@ -77,23 +223,37 @@ export default function WeatherUpdateScreen() {
             style={styles.mainCard}>
             <View style={styles.mainTopRow}>
               <View>
-                <Text style={styles.mainTemp}>28°</Text>
-                <Text style={styles.mainCondition}>Light Rain</Text>
-                <Text style={styles.mainDetail}>Feels like 30°</Text>
+                <Text style={styles.mainTemp}>
+                  {Math.round(weatherData.current.temperature_2m)}°
+                </Text>
+                <Text style={styles.mainCondition}>
+                  {getWeatherCondition(weatherData.current.weather_code)}
+                </Text>
+                <Text style={styles.mainDetail}>
+                  Feels like {Math.round(weatherData.current.apparent_temperature)}°
+                </Text>
               </View>
               <View style={styles.mainIconCircle}>
-                <FontAwesome name="umbrella" size={38} color="#fff" />
+                <FontAwesome 
+                  name={getWeatherIcon(weatherData.current.weather_code) as any} 
+                  size={38} 
+                  color="#fff" 
+                />
               </View>
             </View>
 
             <View style={styles.mainBottomRow}>
               <View style={styles.infoPill}>
                 <FontAwesome name="tint" size={14} color="#fff" />
-                <Text style={styles.infoPillText}>Humidity 78%</Text>
+                <Text style={styles.infoPillText}>
+                  Humidity {Math.round(weatherData.current.relative_humidity_2m)}%
+                </Text>
               </View>
               <View style={styles.infoPill}>
-                <FontAwesome name="leaf" size={14} color="#fff" />
-                <Text style={styles.infoPillText}>Soil moisture 80%</Text>
+                <FontAwesome name="flag-o" size={14} color="#fff" />
+                <Text style={styles.infoPillText}>
+                  Wind {Math.round(weatherData.current.wind_speed_10m)} km/h
+                </Text>
               </View>
             </View>
           </LinearGradient>
@@ -101,27 +261,39 @@ export default function WeatherUpdateScreen() {
           {/* Today summary */}
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Rain chance</Text>
-              <Text style={styles.summaryValue}>65%</Text>
+              <Text style={styles.summaryLabel}>Rain</Text>
+              <Text style={styles.summaryValue}>
+                {Math.round(weatherData.current.precipitation)} mm
+              </Text>
             </View>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Wind</Text>
-              <Text style={styles.summaryValue}>8 km/h</Text>
+              <Text style={styles.summaryValue}>
+                {Math.round(weatherData.current.wind_speed_10m)} km/h
+              </Text>
             </View>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>UV Index</Text>
-              <Text style={styles.summaryValue}>4 (Moderate)</Text>
+              <Text style={styles.summaryValue}>
+                {Math.round(weatherData.daily.uv_index_max[0])} (Moderate)
+              </Text>
             </View>
           </View>
 
           {/* Forecast list */}
           <View style={styles.forecastCard}>
             <Text style={styles.forecastTitle}>Next days</Text>
-            {FORECAST.map((f, idx) => (
-              <View key={f.day} style={[styles.forecastRow, idx !== 0 && styles.forecastRowDivider]}>
+            {forecast.map((f, idx) => (
+              <View 
+                key={f.day} 
+                style={[styles.forecastRow, idx !== 0 && styles.forecastRowDivider]}>
                 <Text style={styles.forecastDay}>{f.day}</Text>
                 <View style={styles.forecastRight}>
-                  <FontAwesome name={f.icon as any} size={18} color={colors.brandBlueLight} />
+                  <FontAwesome 
+                    name={f.icon as any} 
+                    size={18} 
+                    color={colors.brandBlueLight} 
+                  />
                   <Text style={styles.forecastTemp}>{f.temp}</Text>
                 </View>
               </View>
@@ -133,6 +305,30 @@ export default function WeatherUpdateScreen() {
   );
 }
 
+// Helper function to get weather icon based on WMO code
+function getWeatherIcon(code: number): string {
+  if (code === 0) return 'sun-o';
+  if (code <= 3) return 'cloud';
+  if (code <= 67) return 'tint';
+  if (code <= 77) return 'asterisk';
+  if (code <= 82) return 'tint';
+  if (code <= 86) return 'asterisk';
+  if (code >= 95) return 'bolt';
+  return 'cloud';
+}
+
+// Helper function to get weather condition text
+function getWeatherCondition(code: number): string {
+  if (code === 0) return 'Clear sky';
+  if (code <= 3) return 'Partly cloudy';
+  if (code <= 67) return 'Rain';
+  if (code <= 77) return 'Snow';
+  if (code <= 82) return 'Rain showers';
+  if (code <= 86) return 'Snow showers';
+  if (code >= 95) return 'Thunderstorm';
+  return 'Cloudy';
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -140,6 +336,34 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.brandGrayText,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.brandGrayText,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: colors.brandBlue,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   topBar: {
     flexDirection: 'row',
@@ -180,6 +404,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 18,
     color: '#000',
+  },
+  locationCoords: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.brandGrayText,
+    marginTop: 2,
   },
   locationRight: {
     flexDirection: 'row',
@@ -298,5 +528,3 @@ const styles = StyleSheet.create({
     color: '#000',
   },
 });
-
-

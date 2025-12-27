@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Picker } from '@react-native-picker/picker';
 
 import { supabase } from '@/lib/supabase';
 
@@ -50,7 +52,7 @@ export default function SensorDeviceScreen() {
 
   const [devices, setDevices] = useState<SensorDevice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   const [newDevice, setNewDevice] = useState({
     sensor_type: '',
     serial_number: '',
@@ -166,7 +168,7 @@ export default function SensorDeviceScreen() {
 
       setDevices([data, ...devices]);
       setNewDevice({ sensor_type: '', serial_number: '' });
-      setShowAddForm(false);
+      setModalVisible(false);
       Alert.alert('Success', 'Device added successfully');
     } catch (error) {
       console.error('Error adding device:', error);
@@ -244,62 +246,11 @@ export default function SensorDeviceScreen() {
           {farmId && (
             <TouchableOpacity
               style={styles.addButton}
-              onPress={() => setShowAddForm(!showAddForm)}
+              onPress={() => setModalVisible(true)}
             >
               <FontAwesome name="plus" size={18} color="#fff" />
               <Text style={styles.addButtonText}>Add New Device</Text>
             </TouchableOpacity>
-          )}
-
-          {/* Add Device Form */}
-          {showAddForm && farmId && (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Register New Device</Text>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Sensor Type</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newDevice.sensor_type}
-                  onChangeText={(text) => setNewDevice({ ...newDevice, sensor_type: text })}
-                  placeholder="e.g., Soil Moisture, Temperature, Humidity"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Serial Number</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newDevice.serial_number}
-                  onChangeText={(text) => setNewDevice({ ...newDevice, serial_number: text })}
-                  placeholder="Enter serial number"
-                />
-              </View>
-
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={[styles.button, styles.cancelButton]}
-                  onPress={() => {
-                    setShowAddForm(false);
-                    setNewDevice({ sensor_type: '', serial_number: '' });
-                  }}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.button, styles.saveButton]}
-                  onPress={handleAddDevice}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Add Device</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
           )}
 
           {/* Devices List */}
@@ -359,6 +310,63 @@ export default function SensorDeviceScreen() {
           </View>
         </ScrollView>
       </View>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.cardTitle}>Register New Device</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Sensor Type</Text>
+              <TextInput
+                style={styles.input}
+                value={newDevice.sensor_type}
+                onChangeText={(text) => setNewDevice({ ...newDevice, sensor_type: text })}
+                placeholder="e.g., Soil Moisture, Temperature, Humidity"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Serial Number</Text>
+              <TextInput
+                style={styles.input}
+                value={newDevice.serial_number}
+                onChangeText={(text) => setNewDevice({ ...newDevice, serial_number: text })}
+                placeholder="Enter serial number"
+              />
+            </View>
+
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton]}
+                onPress={() => {
+                  setModalVisible(false);
+                  setNewDevice({ sensor_type: '', serial_number: '' });
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, styles.saveButton]}
+                onPress={handleAddDevice}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Add Device</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -593,5 +601,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 13,
     color: '#fff',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxWidth: 340,
   },
 });
