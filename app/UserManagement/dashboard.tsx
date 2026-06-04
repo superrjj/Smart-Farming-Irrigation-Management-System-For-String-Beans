@@ -93,6 +93,20 @@ function formatPHTime(isoString: string): string {
   }).format(new Date(isoString));
 }
 
+function formatRelativeSecondsAgo(isoString: string, nowMs: number): string {
+  const diffSec = Math.max(
+    0,
+    Math.floor((nowMs - new Date(isoString).getTime()) / 1000),
+  );
+  if (diffSec < 1) return "just now";
+  if (diffSec === 1) return "1 second ago";
+  if (diffSec < 60) return `${diffSec} seconds ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin === 1) return "1 minute ago";
+  if (diffMin < 60) return `${diffMin} minutes ago`;
+  return formatPHTime(isoString);
+}
+
 function getWeatherEmoji(code: number): string {
   if (code === 0) return "☀️";
   if (code === 1) return "🌤️";
@@ -219,6 +233,10 @@ const ANALYTICS_SUB_ITEMS = [
 ];
 
 const DRAWER_WIDTH = Math.min(320, Dimensions.get("window").width * 0.8);
+const NOTIF_PANEL_MAX_HEIGHT = Math.min(
+  420,
+  Dimensions.get("window").height * 0.55,
+);
 
 // ── Circular Gauge ──────────────────────────────────────────────────────────
 interface GaugeProps {
@@ -443,6 +461,7 @@ export default function DashboardScreen() {
   const [humidityPercent, setHumidityPercent] = useState<number>(0);
   const [sensorLoading, setSensorLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [notifOpen, setNotifOpen] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<
@@ -465,6 +484,11 @@ export default function DashboardScreen() {
   // ── Forecast state ──
   const [forecastData, setForecastData] = useState<any>(null);
   const [forecastLoading, setForecastLoading] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ── Fetch sensor data ──
   // Replace your existing fetchSensorData useEffect with this:
@@ -2000,7 +2024,8 @@ export default function DashboardScreen() {
                     color: colors.brandGrayText,
                   }}
                 >
-                  Last updated: {formatPHTime(lastUpdated)}
+                  Last updated:{" "}
+                  {formatRelativeSecondsAgo(lastUpdated, nowTick)}
                 </Text>
               </View>
             ) : null}
@@ -2149,48 +2174,55 @@ export default function DashboardScreen() {
                   No recommendations yet.
                 </Text>
               ) : (
-                notifications.map((n) => (
-                  <TouchableOpacity
-                    key={n.id}
-                    activeOpacity={0.8}
-                    onPress={async () => {
-                      if (n.is_read === false || n.is_read === null) {
-                        await markNotificationAsRead(n.id, n.type);
-                      }
-                      setSelectedRecommendation({
-                        title: n.title,
-                        message: n.message,
-                      });
-                    }}
-                    style={[
-                      styles.notifItem,
-                      n.is_read ? styles.notifRead : styles.notifUnread,
-                    ]}
-                  >
-                    <FontAwesome
-                      name={n.type === "admin_remark" ? "comment" : "leaf"}
-                      size={14}
-                      color={
-                        n.is_read
-                          ? "#6B7280"
-                          : n.type === "admin_remark"
-                            ? colors.purple
-                            : colors.brandGreen
-                      }
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.notifTitleText}>{n.title}</Text>
-                      <Text style={styles.notifText}>{n.message}</Text>
-                      {n.created_at && (
-                        <Text style={styles.notifTimeText}>
-                          {formatPHTime(n.created_at)}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                ))
+                <ScrollView
+                  style={styles.notifListScroll}
+                  contentContainerStyle={styles.notifListContent}
+                  showsVerticalScrollIndicator
+                  nestedScrollEnabled
+                >
+                  {notifications.map((n) => (
+                    <TouchableOpacity
+                      key={n.id}
+                      activeOpacity={0.8}
+                      onPress={async () => {
+                        if (n.is_read === false || n.is_read === null) {
+                          await markNotificationAsRead(n.id, n.type);
+                        }
+                        setNotifOpen(false);
+                        setSelectedRecommendation({
+                          title: n.title,
+                          message: n.message,
+                        });
+                      }}
+                      style={[
+                        styles.notifItem,
+                        n.is_read ? styles.notifRead : styles.notifUnread,
+                      ]}
+                    >
+                      <FontAwesome
+                        name={n.type === "admin_remark" ? "comment" : "leaf"}
+                        size={14}
+                        color={
+                          n.is_read
+                            ? "#6B7280"
+                            : n.type === "admin_remark"
+                              ? colors.purple
+                              : colors.brandGreen
+                        }
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.notifTitleText}>{n.title}</Text>
+                        {n.created_at ? (
+                          <Text style={styles.notifTimeText}>
+                            {formatPHTime(n.created_at)}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               )}
-              {unreadCount > 0 && (
+              {notifications.length > 0 && unreadCount > 0 && (
                 <View style={styles.notifFooter}>
                   <TouchableOpacity onPress={markAllAsRead}>
                     <Text style={styles.markAllReadText}>Mark all as read</Text>
@@ -2915,12 +2947,22 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     width: 300,
+    maxHeight: NOTIF_PANEL_MAX_HEIGHT,
     shadowColor: "#000",
     shadowOpacity: 0.15,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
     gap: 10,
+    overflow: "hidden",
+  },
+  notifListScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  notifListContent: {
+    gap: 8,
+    paddingBottom: 4,
   },
   notifHeader: {
     flexDirection: "row",
