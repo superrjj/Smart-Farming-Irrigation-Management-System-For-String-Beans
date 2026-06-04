@@ -1,11 +1,21 @@
 import { isAdminRole } from "@/lib/isAdminRole";
 import {
+  invalidateTodayScheduleSlotsCache,
+  maybeFireScheduledIrrigationAuto,
+  pruneFiredScheduleSlots,
+  startScheduledIrrigationAutoForEmail,
+} from "@/lib/irrigationScheduleAuto";
+import {
+  addNotificationReceivedHandler,
+  addNotificationResponseHandler,
   getExpoPushToken,
   scheduleAdminRemarkNotification,
 } from "@/lib/notifications";
 import { clearAllStorage, getLoggedInEmail } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/lib/toast";
 import { AdminAccessDeniedModal } from "@/components/admin-access-denied-modal";
+import { ToastHost } from "@/components/ToastHost";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -301,6 +311,7 @@ export default function UserManagementLayout() {
             return;
           }
           scheduleIdsRef.current = (data ?? []).map((row) => String(row.id));
+          invalidateTodayScheduleSlotsCache();
         },
       )
       .subscribe();
@@ -310,8 +321,49 @@ export default function UserManagementLayout() {
     };
   }, [userId]);
 
+  useEffect(() => {
+    if (!userId || !userEmail) return;
+
+    const fireScheduledAuto = () => {
+      showToast("Irrigation notification → checking Automatic mode…", "info");
+      void startScheduledIrrigationAutoForEmail(userEmail, userId, null);
+    };
+
+    const removeResponseHandler = addNotificationResponseHandler((response) => {
+      const data = response.notification.request.content.data as {
+        scheduleId?: string;
+        day?: number;
+      };
+      if (data?.scheduleId && typeof data.day === "number") {
+        fireScheduledAuto();
+      }
+    });
+
+    const removeReceivedHandler = addNotificationReceivedHandler((notification) => {
+      const data = notification.request.content.data as {
+        scheduleId?: string;
+        day?: number;
+      };
+      if (data?.scheduleId && typeof data.day === "number") {
+        fireScheduledAuto();
+      }
+    });
+
+    const interval = setInterval(() => {
+      pruneFiredScheduleSlots();
+      void maybeFireScheduledIrrigationAuto(userEmail, userId);
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      removeResponseHandler();
+      removeReceivedHandler();
+    };
+  }, [userEmail, userId]);
+
   return (
     <>
+      <ToastHost />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen
           name="splashScreen"

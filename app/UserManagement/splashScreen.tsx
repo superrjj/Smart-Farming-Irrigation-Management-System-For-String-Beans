@@ -71,10 +71,11 @@ export default function SplashScreen() {
                   return;
                 }
                 // Farmer (or non-admin): go to dashboard
+                const userEmail = userProfile.email;
                 setTimeout(() => {
                   router.replace({
                     pathname: '/UserManagement/dashboard',
-                    params: { email: userProfile.email },
+                    params: { email: userEmail },
                   });
                 }, 4000);
                 return;

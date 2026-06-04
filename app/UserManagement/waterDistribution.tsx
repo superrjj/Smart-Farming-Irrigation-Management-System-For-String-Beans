@@ -1,5 +1,7 @@
+import { cancelNotificationsForSchedule } from "@/lib/notifications";
 import { fontScale, scale } from "@/lib/responsive";
 import { supabase } from "@/lib/supabase";
+import { showToast } from "@/lib/toast";
 import { FontAwesome } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -327,6 +329,37 @@ export default function WaterDistributionScreen() {
     void init();
   }, [email]);
 
+  const clearUserIrrigationSchedules = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const { data: schedules, error: schedulesError } = await supabase
+        .from("irrigation_schedules")
+        .select("id")
+        .eq("user_id", userId);
+      if (schedulesError) throw schedulesError;
+
+      const scheduleIds = (schedules ?? []).map((s) => String(s.id));
+      if (scheduleIds.length === 0) return;
+
+      const { error: deleteError } = await supabase
+        .from("irrigation_scheduled_dates")
+        .delete()
+        .in("schedule_id", scheduleIds);
+      if (deleteError) throw deleteError;
+
+      await Promise.all(
+        scheduleIds.map((scheduleId) =>
+          cancelNotificationsForSchedule(scheduleId),
+        ),
+      );
+    } catch (err) {
+      console.error(
+        "[WaterDistribution] Failed to clear irrigation schedules:",
+        err,
+      );
+    }
+  }, [userId]);
+
   const applyAutoIrrigationMode = useCallback(
     async (on: boolean) => {
       if (!system?.id || sending) return;
@@ -340,6 +373,10 @@ export default function WaterDistributionScreen() {
 
       setSending(true);
       try {
+        if (on) {
+          await clearUserIrrigationSchedules();
+        }
+
         const scheduleId = await getActiveScheduleId();
         const shouldStopPump = !on && Boolean(system.pump_status);
         // In auto mode, hardware owns pump decisions from soil thresholds.
@@ -402,11 +439,14 @@ export default function WaterDistributionScreen() {
           })),
         );
 
+        showToast(
+          on
+            ? "Water Distribution: Automatic mode ON (schedules cleared)"
+            : "Water Distribution: Manual mode ON",
+          "success",
+        );
         if (!bridgeSynced) {
-          Alert.alert(
-            "Saved",
-            "Your irrigation settings have been updated successfully."
-          );
+          showToast("Saved to database; bridge sync pending", "info");
         }
       } catch (err) {
         console.error("Failed to set automatic irrigation mode:", err);
@@ -422,6 +462,7 @@ export default function WaterDistributionScreen() {
     },
     [
       areas,
+      clearUserIrrigationSchedules,
       sending,
       supportsAutoModeColumn,
       syncIrrigationStateToBridge,
@@ -664,7 +705,7 @@ export default function WaterDistributionScreen() {
                   ]}
                 />
                 <Text style={styles.statusLabel}>
-                  {isRunning ? "System Running" : "System Stopped"}
+                  {isRunning ? "Tumatakbo ang Sistema" : "Huminto ang Sistema"}
                 </Text>
                 <View
                   style={[
@@ -731,6 +772,7 @@ export default function WaterDistributionScreen() {
                       );
                       return;
                     }
+                    void applyAutoIrrigationMode(false);
                     setIrrigationMode("manual");
                   }}
                 >

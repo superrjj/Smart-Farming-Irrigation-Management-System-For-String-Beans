@@ -1,14 +1,24 @@
 import {
+  addNotificationReceivedHandler,
+  addNotificationResponseHandler,
   philippinesCalendarCompare,
+  getPhilippinesNowClock,
+  getPhilippinesTodayYmd,
   requestNotificationPermissions,
   rescheduleNotificationsForDates,
-  setNotificationReceivedHandler,
-  setNotificationResponseHandler,
 } from "@/lib/notifications";
+import {
+  ensureManualModeForEmail,
+  invalidateTodayScheduleSlotsCache,
+  parseScheduleTimeToMinutes,
+  resolveIrrigationSystem,
+  startScheduledIrrigationAutoForEmail,
+} from "@/lib/irrigationScheduleAuto";
+import { getLoggedInEmail } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import { FontAwesome } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -45,6 +55,14 @@ const fonts = {
   medium: "Poppins_500Medium",
   semibold: "Poppins_600SemiBold",
   bold: "Poppins_700Bold",
+};
+
+type IrrigationSystemRow = {
+  id: number;
+  farm_id: number;
+  system_name: string;
+  pump_status: boolean;
+  auto_mode_enabled?: boolean | null;
 };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -233,7 +251,9 @@ const sensorStyles = StyleSheet.create({
 
 export default function IrrigationScheduleScreen() {
   const params = useLocalSearchParams<{ email?: string }>();
-  const email = typeof params.email === "string" ? params.email : "";
+  const routeEmail =
+    typeof params.email === "string" ? params.email.trim() : "";
+  const [accountEmail, setAccountEmail] = useState(routeEmail);
   const router = useRouter();
   const today = new Date();
   const [nowTick, setNowTick] = useState(() => new Date());
@@ -282,6 +302,53 @@ export default function IrrigationScheduleScreen() {
   const [soilMoisture, setSoilMoisture] = useState(0);
   const [temperature, setTemperature] = useState(0);
   const [humidity, setHumidity] = useState(0);
+  const [irrigationSystem, setIrrigationSystem] =
+    useState<IrrigationSystemRow | null>(null);
+  const [supportsAutoModeColumn, setSupportsAutoModeColumn] = useState(true);
+  const firedScheduleSlotsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    void (async () => {
+      const stored = (await getLoggedInEmail())?.trim() ?? "";
+      setAccountEmail(routeEmail || stored);
+    })();
+  }, [routeEmail]);
+
+  const syncIrrigationSystemState = useCallback(async () => {
+    if (!userId && !accountEmail) return;
+    const { system, supportsAutoMode } = await resolveIrrigationSystem({
+      email: accountEmail,
+      userId,
+    });
+    setSupportsAutoModeColumn(supportsAutoMode);
+    setIrrigationSystem(system);
+  }, [accountEmail, userId]);
+
+  /** Save schedule → force MANUAL (AUTOMATIC → MANUAL when currently auto). */
+  const ensureManualModeForSchedule = useCallback(async () => {
+    if (!userId && !accountEmail) return;
+    const ok = await ensureManualModeForEmail(
+      accountEmail,
+      userId,
+      currentScheduleId,
+    );
+    if (ok) await syncIrrigationSystemState();
+  }, [accountEmail, currentScheduleId, syncIrrigationSystemState, userId]);
+
+  /** Scheduled date/time reached → force AUTOMATIC (stays automatic after). */
+  const startScheduledIrrigationAuto = useCallback(async () => {
+    if (!userId && !accountEmail) return;
+    const ok = await startScheduledIrrigationAutoForEmail(
+      accountEmail,
+      userId,
+      currentScheduleId,
+    );
+    if (ok) await syncIrrigationSystemState();
+  }, [accountEmail, currentScheduleId, syncIrrigationSystemState, userId]);
+
+  useEffect(() => {
+    if (userId || accountEmail) void syncIrrigationSystemState();
+  }, [syncIrrigationSystemState, userId, accountEmail]);
 
   // ─── Admin Remarks ────────────────────────────────────────────────────────
   const [adminRemarks, setAdminRemarks] = useState<Map<string, string>>(
@@ -417,8 +484,9 @@ export default function IrrigationScheduleScreen() {
   for (let i = 1; i <= daysInMonth; i++) calendarDays.push(i);
 
   useEffect(() => {
-    requestNotificationPermissions();
-    setNotificationResponseHandler((response) => {
+    void requestNotificationPermissions();
+
+    const removeResponseHandler = addNotificationResponseHandler((response) => {
       const data = response.notification.request.content.data as any;
       if (data?.scheduleId && typeof data.day === "number") {
         const notificationDate = new Date(data.year, data.month - 1, data.day);
@@ -440,7 +508,8 @@ export default function IrrigationScheduleScreen() {
         setAlarmModalVisible(true);
       }
     });
-    setNotificationReceivedHandler((notification) => {
+
+    const removeReceivedHandler = addNotificationReceivedHandler((notification) => {
       const data = notification.request.content.data as any;
       if (data?.scheduleId && typeof data.day === "number") {
         setAlarmScheduleData({
@@ -453,11 +522,16 @@ export default function IrrigationScheduleScreen() {
         setAlarmModalVisible(true);
       }
     });
+
+    return () => {
+      removeResponseHandler();
+      removeReceivedHandler();
+    };
   }, []);
 
   useEffect(() => {
-    fetchUserSession();
-  }, [email]);
+    if (accountEmail) void fetchUserSession();
+  }, [accountEmail]);
 
   useEffect(() => {
     if (userId && !currentScheduleId) {
@@ -531,23 +605,30 @@ export default function IrrigationScheduleScreen() {
   }, [currentScheduleId, userId, currentMonth, currentYear]);
 
   const fetchUserSession = async () => {
-    if (!email) {
+    if (!accountEmail) {
       Alert.alert("Error", "No email provided");
       setLoading(false);
       return;
     }
     try {
-      const { data: userData, error } = await supabase
+      let { data: userData, error } = await supabase
         .from("user_profiles")
         .select("id")
-        .eq("email", email)
-        .single();
+        .eq("email", accountEmail)
+        .maybeSingle();
+      if (!userData) {
+        ({ data: userData, error } = await supabase
+          .from("user_profiles")
+          .select("id")
+          .ilike("email", accountEmail)
+          .maybeSingle());
+      }
       if (error || !userData) {
         Alert.alert("Error", "User not found");
         setLoading(false);
         return;
       }
-      setUserId(userData.id);
+      setUserId(String(userData.id));
     } catch {
       Alert.alert("Error", "Failed to load user session");
       setLoading(false);
@@ -650,10 +731,10 @@ export default function IrrigationScheduleScreen() {
   ) => {
     try {
       if (showLoading) setLoading(true);
-      const todayDate = new Date();
-      const todayMonth = todayDate.getMonth() + 1;
-      const todayYear = todayDate.getFullYear();
-      const todayDay = todayDate.getDate();
+      const phToday = getPhilippinesTodayYmd();
+      const todayMonth = phToday.month;
+      const todayYear = phToday.year;
+      const todayDay = phToday.day;
 
       const { data, error } = await supabase
         .from("irrigation_scheduled_dates")
@@ -1036,6 +1117,8 @@ export default function IrrigationScheduleScreen() {
         setTimeout(() => updateTodayStats(), 10);
       }
       await fetchScheduledDates(currentScheduleId);
+      invalidateTodayScheduleSlotsCache();
+      await ensureManualModeForSchedule();
       setAddScheduleModalVisible(false);
       Alert.alert(
         "Success",
@@ -1198,18 +1281,52 @@ export default function IrrigationScheduleScreen() {
     return available;
   };
 
-  const timeToMinutes = (timeStr: string): number => {
-    try {
-      const [time, period] = timeStr.split(" ");
-      const [hour, minute] = time.split(":").map(Number);
-      let total = hour * 60 + minute;
-      if (period === "PM" && hour !== 12) total += 12 * 60;
-      else if (period === "AM" && hour === 12) total -= 12 * 60;
-      return total;
-    } catch {
-      return 0;
-    }
-  };
+  const timeToMinutes = (timeStr: string): number =>
+    parseScheduleTimeToMinutes(timeStr);
+
+  const triggerScheduleAutoForSlot = useCallback(
+    (year: number, month: number, day: number, timeStr: string) => {
+      if (!timeStr || timeStr === "Not set") return;
+      const phNow = getPhilippinesNowClock();
+      if (
+        phNow.year !== year ||
+        phNow.month !== month ||
+        phNow.day !== day
+      ) {
+        return;
+      }
+      const slotMinutes = parseScheduleTimeToMinutes(timeStr);
+      if (slotMinutes < 0 || slotMinutes !== phNow.minutesSinceMidnight) return;
+      const slotKey = `${year}-${month}-${day}|${slotMinutes}`;
+      if (firedScheduleSlotsRef.current.has(slotKey)) return;
+      firedScheduleSlotsRef.current.add(slotKey);
+      void startScheduledIrrigationAuto();
+    },
+    [startScheduledIrrigationAuto],
+  );
+
+  useEffect(() => {
+    if (!irrigationSystem?.id || (!userId && !accountEmail)) return;
+    const phNow = getPhilippinesNowClock();
+    const dateKey = `${phNow.year}-${phNow.month}-${phNow.day}`;
+    const todaySchedule = dateSchedules.get(dateKey);
+    if (!todaySchedule) return;
+    todaySchedule.schedules.forEach((s) => {
+      triggerScheduleAutoForSlot(
+        todaySchedule.year,
+        todaySchedule.month,
+        todaySchedule.day,
+        s.time,
+      );
+    });
+  }, [
+    accountEmail,
+    dateSchedules,
+    irrigationSystem?.id,
+    nowTick,
+    triggerScheduleAutoForSlot,
+    userId,
+  ]);
 
   /** Same clock time (avoids duplicate "08:00 AM" vs "8:00 AM" if formats differ). */
   const timesMatchClock = (a: string, b: string): boolean =>

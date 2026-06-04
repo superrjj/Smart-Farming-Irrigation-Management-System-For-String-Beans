@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
-const LOCATION = { name: "Tarlac Province", lat: 15.4755, lon: 120.5963 };
+const LOCATION = { name: "Lalawigan ng Tarlac", lat: 15.4755, lon: 120.5963 };
 
 const colors = {
   primary: "#22C55E",
@@ -40,21 +40,21 @@ const fonts = {
 };
 
 const MONTH_LABELS = [
-  "Jan",
-  "Feb",
+  "Ene",
+  "Peb",
   "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  "Abr",
+  "Mayo",
+  "Hun",
+  "Hul",
+  "Ago",
+  "Set",
+  "Okt",
+  "Nob",
+  "Dis",
 ];
 
-const TYPHOON_MONTHS = ["Jun", "Jul", "Aug", "Sep", "Oct", "Nov"];
+const TYPHOON_MONTHS = ["Hun", "Hul", "Ago", "Set", "Okt", "Nob"];
 
 // ── Derivation helpers ────────────────────────────────────────────────────────
 const deriveSoilMoisture = (rainfall: number, temp: number) =>
@@ -221,12 +221,12 @@ type ChartKey =
   | "humidity";
 
 const CHART_TABS: { key: ChartKey; label: string }[] = [
-  { key: "rainfall", label: "Rainfall" },
-  { key: "moisture", label: "Moisture" },
+  { key: "rainfall", label: "Ulan" },
+  { key: "moisture", label: "Halumig sa Lupa" },
   { key: "temp", label: "Temp" },
-  { key: "humidity", label: "Humidity" },
-  { key: "scarcity", label: "Scarcity" },
-  { key: "irrigation", label: "Irrigate" },
+  { key: "humidity", label: "Halumig" },
+  { key: "scarcity", label: "Kakulangan" },
+  { key: "irrigation", label: "Patubig" },
 ];
 
 // ── Bar Chart ─────────────────────────────────────────────────────────────────
@@ -453,16 +453,16 @@ export default function SeasonalSummaryScreen() {
 
   const chartNote: Record<ChartKey, string> = {
     rainfall:
-      "🌧️ Orange bars indicate typhoon-season months (Jun–Nov). Tarlac is driest Feb–Apr.",
+      "🌧️ Kulay orange ang mga buwan ng bagyo (Hun–Nob). Pinakamadalas na tuyo ang Tarlac (Peb–Abr).",
     moisture:
-      "🌱 Estimated soil moisture from rainfall and temperature. Higher = wetter soil.",
+      "🌱 Tinatantya ang halumig ng lupa mula sa ulan at temperatura. Mas mataas = mas basa ang lupa.",
     scarcity:
-      "⚠️ Higher = more water scarce. Tarlac faces highest scarcity in Mar–Apr.",
+      "⚠️ Mas mataas = mas kakulangan sa tubig. Pinakamataas ang kakulangan sa Tarlac (Mar–Abr).",
     irrigation:
-      "💦 Estimated supplemental water needed beyond natural rainfall (mm/month).",
-    temp: "🌡️ Average daily temperature. String beans prefer 18–30°C for optimal growth.",
+      "💦 Tinatantyang dagdag na tubig na kailangan bukod sa natural na ulan (mm/buwan).",
+    temp: "🌡️ Average na araw-araw na temperatura. Mas mainam para sa sitaw ang 18–30°C.",
     humidity:
-      "💧 Average relative humidity. Ideal range for string beans is 55–75%.",
+      "💧 Average na relative humidity. Ideal na saklaw para sa sitaw ay 55–75%.",
   };
 
   return (
@@ -476,7 +476,7 @@ export default function SeasonalSummaryScreen() {
           >
             <FontAwesome name="chevron-left" size={16} color={colors.dark} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Seasonal Summary</Text>
+          <Text style={styles.headerTitle}>Buod ng Panahon</Text>
         </View>
       </View>
 
@@ -524,7 +524,7 @@ export default function SeasonalSummaryScreen() {
         <View style={styles.loader}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loaderText}>
-            Fetching {selectedYear} climate data…
+            Kinukuha ang climate data ng {selectedYear}…
           </Text>
         </View>
       ) : (
@@ -538,8 +538,8 @@ export default function SeasonalSummaryScreen() {
             <View style={styles.noticeBanner}>
               <FontAwesome name="info-circle" size={13} color={colors.blue} />
               <Text style={styles.noticeText}>
-                Showing {currentYear} data — {MONTH_LABELS[currentMonth]} is the
-                most recent complete month.
+                Ipinapakita ang data ng {currentYear} — ang {MONTH_LABELS[currentMonth]} ang
+                pinakabagong kumpletong buwan.
               </Text>
             </View>
           )}
@@ -553,25 +553,25 @@ export default function SeasonalSummaryScreen() {
             <StatCard
               icon="warning"
               iconColor={scarcityColor}
-              label="Water Scarcity"
+              label="Kakulangan sa Tubig"
               value={`${avgScarcity}/100`}
               sub={
                 isCurrentYear
-                  ? `Jan–${MONTH_LABELS[currentMonth]} avg`
-                  : "Annual avg"
+                  ? `Avg Ene–${MONTH_LABELS[currentMonth]}`
+                  : "Taunang avg"
               }
             />
             <StatCard
               icon="sun-o"
               iconColor={colors.orange}
-              label="Dry Months"
+              label="Tuyong Buwan"
               value={`${dryMonths}`}
-              sub="Scarcity >60"
+              sub="Kakulangan >60"
             />
             <StatCard
               icon="tint"
               iconColor={colors.blue}
-              label="Peak Irrigation"
+              label="Pinakamataas na Patubig"
               value={
                 peakIrrigation ? `${peakIrrigation.irrigationNeed}mm` : "—"
               }
@@ -580,12 +580,12 @@ export default function SeasonalSummaryScreen() {
             <StatCard
               icon="thermometer"
               iconColor={colors.orange}
-              label="Avg Temp"
+              label="Avg na Temp"
               value={`${avgTemp}°C`}
               sub={
                 isCurrentYear
-                  ? `Jan–${MONTH_LABELS[currentMonth]}`
-                  : "Annual avg"
+                  ? `Ene–${MONTH_LABELS[currentMonth]}`
+                  : "Taunang avg"
               }
             />
           </ScrollView>
@@ -593,7 +593,7 @@ export default function SeasonalSummaryScreen() {
           {/* Main Chart Card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
-              Monthly Climate — {selectedYear}
+              Buwanang Klima — {selectedYear}
             </Text>
             <Text style={styles.cardSub}>
               {LOCATION.name} · Open-Meteo archive data
@@ -650,7 +650,7 @@ export default function SeasonalSummaryScreen() {
                       backgroundColor: colors.orange,
                     }}
                   />
-                  <Text style={styles.legendText}>Typhoon season</Text>
+                  <Text style={styles.legendText}>Panahon ng bagyo</Text>
                 </View>
               </View>
             )}
@@ -662,22 +662,22 @@ export default function SeasonalSummaryScreen() {
           {/* Monthly Water Scarcity Table */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
-              Monthly Water Scarcity — {selectedYear}
+              Buwanang Kakulangan sa Tubig — {selectedYear}
             </Text>
             {isCurrentYear && (
               <Text style={styles.cardSub}>
-                Jan–{MONTH_LABELS[currentMonth]} only
+                Ene–{MONTH_LABELS[currentMonth]} lamang
               </Text>
             )}
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Month</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Buwan</Text>
               <Text
                 style={[
                   styles.tableHeaderCell,
                   { flex: 1.5, textAlign: "right" },
                 ]}
               >
-                Rain{"\n"}& Scarcity
+                Ulan{"\n"}at Kakulangan
               </Text>
               <Text
                 style={[
@@ -685,7 +685,7 @@ export default function SeasonalSummaryScreen() {
                   { flex: 1.5, textAlign: "right" },
                 ]}
               >
-                Irrigate
+                Patubig
               </Text>
               <Text
                 style={[
@@ -693,16 +693,16 @@ export default function SeasonalSummaryScreen() {
                   { flex: 1, textAlign: "center" },
                 ]}
               >
-                Status
+                Kalagayan
               </Text>
             </View>
             {visibleMonths.map((m, i) => {
               const scLevel =
                 m.scarcityIndex > 60
-                  ? "High"
+                  ? "Mataas"
                   : m.scarcityIndex > 30
-                    ? "Med"
-                    : "Low";
+                    ? "Katamtaman"
+                    : "Mababa";
               const scColor =
                 m.scarcityIndex > 60
                   ? colors.red
@@ -723,7 +723,7 @@ export default function SeasonalSummaryScreen() {
                   <View style={{ flex: 1.2 }}>
                     <Text style={styles.tableCell}>{m.month}</Text>
                     {isCurrentMonthRow && (
-                      <Text style={styles.currentTag}>now</Text>
+                      <Text style={styles.currentTag}>ngayon</Text>
                     )}
                   </View>
                   {/* Rain mm + scarcity bar in one column */}
@@ -787,9 +787,9 @@ export default function SeasonalSummaryScreen() {
 
           {/* Soil Moisture Card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Soil Moisture — {selectedYear}</Text>
+            <Text style={styles.cardTitle}>Halumig ng Lupa — {selectedYear}</Text>
             <Text style={styles.cardSub}>
-              Estimated from rainfall and temperature
+              Tinatantya mula sa ulan at temperatura
             </Text>
             <View style={{ gap: 10, marginTop: 4 }}>
               {visibleMonths
@@ -828,38 +828,38 @@ export default function SeasonalSummaryScreen() {
 
           {/* Farming Tips Card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Farming Tips for Tarlac</Text>
-            <Text style={styles.cardSub}>String bean cultivation guidance</Text>
+            <Text style={styles.cardTitle}>Mga Tip sa Pagsasaka sa Tarlac</Text>
+            <Text style={styles.cardSub}>Gabay sa pagtatanim ng sitaw</Text>
             <View style={{ gap: 8 }}>
               {[
                 {
                   emoji: "🌱",
-                  title: "Best Planting Months",
-                  text: "Oct–Dec and Feb–Apr offer the most stable conditions. Avoid peak typhoon months (Aug–Sep).",
+                  title: "Pinakamainam na Buwan ng Pagtatanim",
+                  text: "Ang Okt–Dis at Peb–Abr ang pinaka-stable na kondisyon. Iwasan ang peak na bagyo (Ago–Set).",
                   bg: "#F0FDF4",
                   border: "#BBF7D0",
                   titleColor: "#166534",
                 },
                 {
                   emoji: "💧",
-                  title: "Dry Season Preparation (Feb–Apr)",
-                  text: "Pre-plan irrigation reserves. Target 20–25mm/week. Use mulching to retain soil moisture.",
+                  title: "Paghahanda sa Tag-araw (Peb–Abr)",
+                  text: "Magplano ng reserba ng patubig. Target na 20–25mm/linggo. Gumamit ng mulch para mapanatili ang halumig ng lupa.",
                   bg: "#FFFBEB",
                   border: "#FDE68A",
                   titleColor: "#92400E",
                 },
                 {
                   emoji: "🌀",
-                  title: "Typhoon Season (Jun–Nov)",
-                  text: "Use raised beds and clear drainage channels. Avoid planting Aug–Sep when typhoon risk is highest.",
+                  title: "Panahon ng Bagyo (Hun–Nob)",
+                  text: "Gumamit ng raised bed at linisin ang daluyan. Iwasan ang pagtatanim Ago–Set kapag pinakamataas ang panganib ng bagyo.",
                   bg: "#EEF2FF",
                   border: "#C7D2FE",
                   titleColor: "#4338CA",
                 },
                 {
                   emoji: "🌡️",
-                  title: "Heat Stress Management",
-                  text: "Tarlac summers can exceed 35°C. Use early morning irrigation and shade netting in April–May.",
+                  title: "Pamamahala sa Init",
+                  text: "Maaaring lumampas sa 35°C ang tag-init sa Tarlac. Magpatubig sa umaga at gumamit ng shade net Abr–Mayo.",
                   bg: "#FEF2F2",
                   border: "#FCA5A5",
                   titleColor: "#991B1B",

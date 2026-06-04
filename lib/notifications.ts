@@ -25,11 +25,6 @@ type Subscription = { remove: () => void };
 // Canonical Expo Go detection for SDK 53+: "storeClient" only in Expo Go, never in a real build
 const isExpoGo = Constants.executionEnvironment === "storeClient";
 
-let notificationResponseHandler:
-  | ((response: NotificationResponse) => void)
-  | null = null;
-let notificationResponseSubscription: Subscription | null = null;
-let notificationReceivedSubscription: Subscription | null = null;
 let notificationsModulePromise: Promise<
   typeof import("expo-notifications") | null
 > | null = null;
@@ -77,61 +72,115 @@ async function ensureNotificationHandler() {
   return Notifications;
 }
 
-// Set up notification response listener
+let notificationResponseHandlers = new Set<
+  (response: NotificationResponse) => void
+>();
+let notificationReceivedHandlers = new Set<
+  (notification: Notification) => void
+>();
+let notificationResponseSubscription: Subscription | null = null;
+let notificationReceivedSubscription: Subscription | null = null;
+
+function dispatchNotificationResponse(response: NotificationResponse) {
+  notificationResponseHandlers.forEach((handler) => {
+    try {
+      handler(response);
+    } catch (error) {
+      console.error("[notifications] response handler failed:", error);
+    }
+  });
+}
+
+function dispatchNotificationReceived(notification: Notification) {
+  notificationReceivedHandlers.forEach((handler) => {
+    try {
+      handler(notification);
+    } catch (error) {
+      console.error("[notifications] received handler failed:", error);
+    }
+  });
+}
+
+async function ensureNotificationResponseListener() {
+  if (isExpoGo) return;
+  const Notifications = await ensureNotificationHandler();
+  if (!Notifications || notificationResponseSubscription) return;
+
+  notificationResponseSubscription =
+    Notifications.addNotificationResponseReceivedListener((response) => {
+      dispatchNotificationResponse(response as NotificationResponse);
+    }) as Subscription;
+
+  const response = await Notifications.getLastNotificationResponseAsync();
+  if (response) {
+    dispatchNotificationResponse(response as NotificationResponse);
+  }
+}
+
+async function ensureNotificationReceivedListener() {
+  if (isExpoGo) return;
+  const Notifications = await ensureNotificationHandler();
+  if (!Notifications || notificationReceivedSubscription) return;
+
+  notificationReceivedSubscription =
+    Notifications.addNotificationReceivedListener((notification) => {
+      dispatchNotificationReceived(notification as Notification);
+    }) as Subscription;
+}
+
+export function addNotificationResponseHandler(
+  handler: (response: NotificationResponse) => void,
+): () => void {
+  notificationResponseHandlers.add(handler);
+  void ensureNotificationResponseListener();
+  return () => {
+    notificationResponseHandlers.delete(handler);
+  };
+}
+
+export function addNotificationReceivedHandler(
+  handler: (notification: Notification) => void,
+): () => void {
+  notificationReceivedHandlers.add(handler);
+  void ensureNotificationReceivedListener();
+  return () => {
+    notificationReceivedHandlers.delete(handler);
+  };
+}
+
+/** @deprecated Prefer addNotificationResponseHandler for composable listeners. */
 export function setNotificationResponseHandler(
   handler: (response: NotificationResponse) => void,
 ) {
-  notificationResponseHandler = handler;
-
-  if (isExpoGo) {
-    return;
-  }
-
-  void (async () => {
-    const Notifications = await ensureNotificationHandler();
-    if (!Notifications) return;
-
-    // Listen for notification responses (when user taps notification)
-    notificationResponseSubscription =
-      Notifications.addNotificationResponseReceivedListener(
-        handler,
-      ) as Subscription;
-
-    // Get last notification response (if app was opened from notification)
-    const response = await Notifications.getLastNotificationResponseAsync();
-    if (response) {
-      handler(response as NotificationResponse);
-    }
-  })();
+  notificationResponseHandlers.clear();
+  notificationResponseHandlers.add(handler);
+  void ensureNotificationResponseListener();
 }
 
-// Set up notification received listener (for foreground notifications)
+/** @deprecated Prefer addNotificationReceivedHandler for composable listeners. */
 export function setNotificationReceivedHandler(
   handler: (notification: Notification) => void,
 ) {
-  if (isExpoGo) {
-    return;
-  }
-
-  void (async () => {
-    const Notifications = await ensureNotificationHandler();
-    if (!Notifications) return;
-    notificationReceivedSubscription =
-      Notifications.addNotificationReceivedListener(handler) as Subscription;
-  })();
+  notificationReceivedHandlers.clear();
+  notificationReceivedHandlers.add(handler);
+  void ensureNotificationReceivedListener();
 }
 
 // Remove notification response listener
 export function removeNotificationResponseHandler() {
+  notificationResponseHandlers.clear();
   if (notificationResponseSubscription) {
     notificationResponseSubscription.remove();
     notificationResponseSubscription = null;
   }
+}
+
+export function removeNotificationReceivedHandler() {
+  notificationReceivedHandlers.clear();
   if (notificationReceivedSubscription) {
     notificationReceivedSubscription.remove();
     notificationReceivedSubscription = null;
   }
-  notificationResponseHandler = null;
 }
 
 // Request notification permissions
@@ -257,6 +306,34 @@ export function getPhilippinesTodayYmd(): {
   const n = (t: string) =>
     parseInt(parts.find((p) => p.type === t)?.value ?? "0", 10);
   return { year: n("year"), month: n("month"), day: n("day") };
+}
+
+/** Current clock in Asia/Manila (schedule times are PH civil time). */
+export function getPhilippinesNowClock(): {
+  year: number;
+  month: number;
+  day: number;
+  minutesSinceMidnight: number;
+} {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(new Date());
+  const n = (t: string) =>
+    parseInt(parts.find((p) => p.type === t)?.value ?? "0", 10);
+  const hour = n("hour") % 24;
+  const minute = n("minute");
+  return {
+    year: n("year"),
+    month: n("month"),
+    day: n("day"),
+    minutesSinceMidnight: hour * 60 + minute,
+  };
 }
 
 /** &lt; 0 if before Manila today, 0 if today, &gt; 0 if after. */
