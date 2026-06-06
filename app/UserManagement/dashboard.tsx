@@ -2580,8 +2580,8 @@ const styles = StyleSheet.create({
 
   // Status chips
   heroChipsRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
+    alignItems: "flex-start",
     gap: 8,
     paddingHorizontal: 4,
     marginTop: -4,
@@ -2629,11 +2629,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    alignSelf: "stretch",
+    flexShrink: 1,
   },
   heroChipNeutralText: {
     fontFamily: fonts.medium,
     fontSize: 12,
     color: "#6B7280",
+    flex: 1,
+    flexShrink: 1,
   },
   skeletonBlock: {
     backgroundColor: "#E5E7EB",

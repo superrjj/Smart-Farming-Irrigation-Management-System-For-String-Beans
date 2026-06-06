@@ -4,7 +4,6 @@ import {
 } from "@/lib/notifications";
 import { getLoggedInEmail } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
-import { showToast } from "@/lib/toast";
 
 const AUTO_MODE_COLUMN = "auto_mode_enabled";
 const DEFAULT_IRRIGATION_BRIDGE_URL =
@@ -426,7 +425,6 @@ export async function setIrrigationAutoMode({
   forcePumpStop?: boolean;
 }): Promise<boolean> {
   if (autoModeBusy) {
-    showToast("Mode change already in progress…", "info");
     return false;
   }
 
@@ -434,7 +432,6 @@ export async function setIrrigationAutoMode({
   try {
     const system = await fetchIrrigationSystemById(systemId);
     if (!system) {
-      showToast("Irrigation system not found", "error");
       return false;
     }
 
@@ -452,7 +449,6 @@ export async function setIrrigationAutoMode({
 
     if (systemError) {
       if (isMissingAutoModeColumnError(systemError)) {
-        showToast("auto_mode_enabled column missing in database", "error");
         return false;
       }
       throw systemError;
@@ -486,12 +482,6 @@ export async function setIrrigationAutoMode({
     return true;
   } catch (error) {
     console.error("[irrigationScheduleAuto] Failed to set irrigation mode:", error);
-    showToast(
-      on
-        ? "Failed to enable Automatic mode"
-        : "Failed to enable Manual mode",
-      "error",
-    );
     return false;
   } finally {
     autoModeBusy = false;
@@ -504,16 +494,11 @@ export async function ensureManualModeForEmail(
   userId?: string | null,
   scheduleId?: string | null,
 ): Promise<boolean> {
-  const { system, supportsAutoMode, failureReason } =
-    await resolveIrrigationSystem({ email, userId });
+  const { system, supportsAutoMode } = await resolveIrrigationSystem({
+    email,
+    userId,
+  });
   if (!system?.id || !supportsAutoMode) {
-    showToast(
-      failureReason ??
-        (supportsAutoMode
-          ? "Manual mode: irrigation system not found"
-          : "Manual mode: auto_mode_enabled not supported"),
-      "error",
-    );
     return false;
   }
   const ok = await setIrrigationAutoMode({
@@ -523,12 +508,6 @@ export async function ensureManualModeForEmail(
     scheduleId,
     forcePumpStop: true,
   });
-  showToast(
-    ok
-      ? "Schedule saved → Manual mode (pump stopped)"
-      : "Schedule saved but Manual mode update failed",
-    ok ? "success" : "error",
-  );
   return ok;
 }
 
@@ -538,16 +517,11 @@ export async function startScheduledIrrigationAutoForEmail(
   userId?: string | null,
   scheduleId?: string | null,
 ): Promise<boolean> {
-  const { system, supportsAutoMode, failureReason } =
-    await resolveIrrigationSystem({ email, userId });
+  const { system, supportsAutoMode } = await resolveIrrigationSystem({
+    email,
+    userId,
+  });
   if (!system?.id || !supportsAutoMode) {
-    showToast(
-      failureReason ??
-        (supportsAutoMode
-          ? "Automatic mode: irrigation system not found"
-          : "Automatic mode: auto_mode_enabled not supported"),
-      "error",
-    );
     return false;
   }
   const ok = await setIrrigationAutoMode({
@@ -556,12 +530,6 @@ export async function startScheduledIrrigationAutoForEmail(
     userId,
     scheduleId,
   });
-  showToast(
-    ok
-      ? "Schedule time reached → switched to Automatic mode"
-      : "Schedule time reached but Automatic mode update failed",
-    ok ? "success" : "error",
-  );
   return ok;
 }
 
