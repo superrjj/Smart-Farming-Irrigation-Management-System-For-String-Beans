@@ -93,26 +93,26 @@ const computeScore = (temp: number, hum: number, rain: number): number => {
 const getScoreStyle = (score: number) => {
   if (score >= 80)
     return {
-      label: "Napakahusay",
+      label: "Excellent",
       color: colors.emerald,
       bg: "#F0FDF4",
       border: "#86EFAC",
     };
   if (score >= 65)
     return {
-      label: "Mabuti",
+      label: "Good",
       color: colors.primary,
       bg: "#EFF6FF",
       border: "#93C5FD",
     };
   if (score >= 50)
     return {
-      label: "Katamtaman",
+      label: "Moderate",
       color: colors.amber,
       bg: "#FFFBEB",
       border: "#FCD34D",
     };
-  return { label: "Mahina", color: colors.red, bg: "#FEF2F2", border: "#FCA5A5" };
+  return { label: "Poor", color: colors.red, bg: "#FEF2F2", border: "#FCA5A5" };
 };
 
 // ── Data fetch ────────────────────────────────────────────────────────────────
@@ -226,17 +226,17 @@ const deriveInsights = (data: MonthlyRecord[]) => {
   if (avgScore >= 70)
     ins.push({
       icon: "🌱",
-      text: `Ang lokasyong ito ay angkop para sa sitaw. Average na marka sa 2 taon: ${avgScore}/100.`,
+      text: `This location is suitable for string beans. Two-year average score: ${avgScore}/100.`,
     });
   else if (avgScore >= 55)
     ins.push({
       icon: "⚠️",
-      text: `Katamtamang angkop. Average na marka: ${avgScore}/100. Kailangan ng aktibong pamamahala sa mga buwang hindi peak.`,
+      text: `Moderately suitable. Average score: ${avgScore}/100. Active management is needed during non-peak months.`,
     });
   else
     ins.push({
       icon: "❌",
-      text: `May malalaking hamon. Average na marka: ${avgScore}/100. Maaaring kailanganin ang proteksiyong istruktura.`,
+      text: `Major challenges present. Average score: ${avgScore}/100. Protective structures may be required.`,
     });
 
   if (excellentMonths.length) {
@@ -245,28 +245,28 @@ const deriveInsights = (data: MonthlyRecord[]) => {
     ].join(", ");
     ins.push({
       icon: "📅",
-      text: `Pinakamainam na panahon ng pagtatanim: ${names}. Palaging 80+ ang marka ng mga buwang ito.`,
+      text: `Best planting season: ${names}. These months consistently score 80+.`,
     });
   }
   if (bestSeason && worstSeason && bestSeason.name !== worstSeason.name)
     ins.push({
       icon: "🔄",
-      text: `Pinakamalakas sa kasaysayan ang ${bestSeason.name} (avg ${bestSeason.avg}/100). Pinakamahina ang ${worstSeason.name} (avg ${worstSeason.avg}/100).`,
+      text: `Historically strongest: ${bestSeason.name} (avg ${bestSeason.avg}/100). Weakest: ${worstSeason.name} (avg ${worstSeason.avg}/100).`,
     });
   if (highRainMonths.length >= 3)
     ins.push({
       icon: "🌧️",
-      text: `${highRainMonths.length} buwan ang lumampas sa 100mm na ulan. Inirerekomenda ang raised bed at daluyan ng tubig.`,
+      text: `${highRainMonths.length} months exceeded 100mm rainfall. Raised beds and drainage are recommended.`,
     });
   if (highHumMonths.length >= 4)
     ins.push({
       icon: "💧",
-      text: `${highHumMonths.length} buwan ang higit sa 75% na halumig. Inirerekomenda ang mas malawak na pagitan ng hanay at maayos na sirkulasyon ng hangin.`,
+      text: `${highHumMonths.length} months exceeded 75% humidity. Wider row spacing and good air circulation are recommended.`,
     });
   if (hotMonths.length >= 2)
     ins.push({
       icon: "🌡️",
-      text: `Naaapektuhan ng init ang ${hotMonths.length} buwan bawat ikot. Inirerekomenda ang patubig sa umaga at shade net.`,
+      text: `Heat affects ${hotMonths.length} months per cycle. Morning irrigation and shade nets are recommended.`,
     });
   if (poorMonths.length) {
     const names = [
@@ -274,7 +274,7 @@ const deriveInsights = (data: MonthlyRecord[]) => {
     ].join(", ");
     ins.push({
       icon: "🚫",
-      text: `Iwasan ang pagtatanim sa: ${names}. Mataas ang panganib ng pagkasira ng ani. Gamitin na lang sa paghahanda ng lupa.`,
+      text: `Avoid planting in: ${names}. High risk of crop loss. Use these months for soil preparation only.`,
     });
   }
   return ins;
@@ -286,63 +286,63 @@ const deriveMonthReco = (record: MonthlyRecord, yearData: MonthlyRecord[]) => {
   if (score >= 80)
     verdict = {
       icon: "✅",
-      title: "Inirerekomendang Magtanim",
-      desc: `Napakahusay ang ${record.month} (${score}/100). Ang mga kondisyon ay nasa ideal na saklaw.`,
+      title: "Recommended to Plant",
+      desc: `Excellent conditions in ${record.month} (${score}/100). Conditions are within the ideal range.`,
     };
   else if (score >= 65)
     verdict = {
       icon: "💡",
-      title: "Mabuti — Kailangan ng Maliit na Ayos",
-      desc: `Karamihan ay pabor ang ${record.month} (${score}/100) ngunit maaaring kailangan ng kaunting ayos.`,
+      title: "Good — Minor Adjustments Needed",
+      desc: `Mostly favorable in ${record.month} (${score}/100) but minor adjustments may be needed.`,
     };
   else if (score >= 50)
     verdict = {
       icon: "⚠️",
-      title: "Katamtaman — Magtanim nang May Ingat",
-      desc: `Katamtaman ang ${record.month} (${score}/100). Posible ang ani ngunit mas mataas ang panganib.`,
+      title: "Moderate — Plant with Caution",
+      desc: `Moderate conditions in ${record.month} (${score}/100). Harvest is possible but risk is higher.`,
     };
   else
     verdict = {
       icon: "❌",
-      title: "Hindi Inirerekomenda",
-      desc: `Mahina ang kondisyon sa ${record.month} (${score}/100). Mataas ang panganib ng pagkasira ng ani.`,
+      title: "Not Recommended",
+      desc: `Poor conditions in ${record.month} (${score}/100). High risk of crop loss.`,
     };
 
   const flags: { icon: string; text: string }[] = [];
   if (record.avgTemp > IDEAL.tempMax)
     flags.push({
       icon: "🌡️",
-      text: `Mataas ang temperatura (${record.avgTemp}°C) — magpatubig sa umaga para bawasan ang stress sa init.`,
+      text: `High temperature (${record.avgTemp}°C) — irrigate in the morning to reduce heat stress.`,
     });
   if (record.avgTemp < IDEAL.tempMin)
     flags.push({
       icon: "❄️",
-      text: `Mababa ang temperatura (${record.avgTemp}°C) — isaalang-alang ang takip sa hanay para mapanatili ang init ng lupa.`,
+      text: `Low temperature (${record.avgTemp}°C) — consider row covers to retain soil warmth.`,
     });
   if (record.avgHumidity > IDEAL.humMax)
     flags.push({
       icon: "💧",
-      text: `Mataas ang halumig (${record.avgHumidity}%) — palawakin ang pagitan ng hanay para mas maayos ang daloy ng hangin.`,
+      text: `High humidity (${record.avgHumidity}%) — widen row spacing for better airflow.`,
     });
   if (record.avgHumidity < IDEAL.humMin)
     flags.push({
       icon: "🌬️",
-      text: `Mababa ang halumig (${record.avgHumidity}%) — mag-mulch nang sapat at magpatubig nang mas madalas.`,
+      text: `Low humidity (${record.avgHumidity}%) — mulch adequately and irrigate more frequently.`,
     });
   if (record.totalRainfall > IDEAL.rainMax)
     flags.push({
       icon: "🌧️",
-      text: `Malakas ang ulan (${record.totalRainfall}mm) — gumamit ng raised bed at linisin ang daluyan ng tubig.`,
+      text: `Heavy rain (${record.totalRainfall}mm) — use raised beds and clear drainage channels.`,
     });
   if (record.totalRainfall < IDEAL.rainMin)
     flags.push({
       icon: "💦",
-      text: `Kaunting ulan (${record.totalRainfall}mm) — dagdagan ng 20–25mm/linggo na patubig.`,
+      text: `Low rainfall (${record.totalRainfall}mm) — supplement with 20–25mm/week irrigation.`,
     });
   if (record.avgWind >= 30)
     flags.push({
       icon: "🌀",
-      text: `Malakas ang hangin (${record.avgWind} km/h) — maglagay ng windbreak o trellis.`,
+      text: `Strong wind (${record.avgWind} km/h) — install windbreaks or trellis support.`,
     });
 
   const alternatives = yearData
@@ -1178,7 +1178,7 @@ export default function PatternAnalyzerScreen() {
       setData(result);
       animateIn();
     } catch {
-      setError("Hindi ma-load ang historical data. Suriin ang iyong koneksyon.");
+      setError("Unable to load historical data. Check your connection.");
     } finally {
       setLoading(false);
     }
@@ -1246,7 +1246,7 @@ export default function PatternAnalyzerScreen() {
           <FontAwesome name="chevron-left" size={16} color={colors.dark} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Pagsusuri ng Pattern</Text>
+          <Text style={styles.headerTitle}>Pattern Analysis</Text>
           <Text style={styles.headerSub}>
             <FontAwesome name="map-marker" size={10} color={colors.primary} />{" "}
             {location} · Pagtatanim ng sitaw
@@ -1379,7 +1379,7 @@ export default function PatternAnalyzerScreen() {
             >
               <FontAwesome name="arrow-up" size={11} color={colors.emerald} />
               <View>
-                <Text style={styles.bwLabel}>Pinakamagandang Buwan</Text>
+                <Text style={styles.bwLabel}>Best Month</Text>
                 <Text style={[styles.bwValue, { color: colors.emerald }]}>
                   {best?.month ?? "—"}
                 </Text>
@@ -1394,7 +1394,7 @@ export default function PatternAnalyzerScreen() {
             >
               <FontAwesome name="arrow-down" size={11} color={colors.red} />
               <View>
-                <Text style={styles.bwLabel}>Pinakamahinang Buwan</Text>
+                <Text style={styles.bwLabel}>Weakest Month</Text>
                 <Text style={[styles.bwValue, { color: colors.red }]}>
                   {worst?.month ?? "—"}
                 </Text>
@@ -1408,14 +1408,14 @@ export default function PatternAnalyzerScreen() {
           {/* Monthly Growing Score */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
-              Buwanang Marka ng Paglago — {selectedYear}
+              Monthly Growth Score — {selectedYear}
             </Text>
             <Text style={styles.cardSub}>
-              Ipinapakita ng bar chart ang buwanang marka ng angkop (%)
+              The bar chart shows monthly suitability score (%)
             </Text>
             <ScoreBarChartJS data={yearData} />
             <Text style={[styles.cardSub, { marginTop: 6, marginBottom: 0 }]}>
-              Pindutin ang buwan sa itaas para makita ang detalye.
+              Tap a month above to view details.
             </Text>
             <View
               style={{
@@ -1426,10 +1426,10 @@ export default function PatternAnalyzerScreen() {
               }}
             >
               {[
-                { c: colors.emerald, l: "80+ Napakahusay" },
-                { c: colors.primary, l: "65–79 Mabuti" },
-                { c: colors.amber, l: "50–64 Katamtaman" },
-                { c: colors.red, l: "<50 Mahina" },
+                { c: colors.emerald, l: "80+ Excellent" },
+                { c: colors.primary, l: "65–79 Good" },
+                { c: colors.amber, l: "50–64 Moderate" },
+                { c: colors.red, l: "<50 Poor" },
               ].map((x) => (
                 <View
                   key={x.l}
@@ -1509,7 +1509,7 @@ export default function PatternAnalyzerScreen() {
                       selectedRecord.avgTemp <= IDEAL.tempMax,
                   },
                   {
-                    label: "Avg na Halumig",
+                    label: "Avg Humidity",
                     value: `${selectedRecord.avgHumidity}%`,
                     ideal: "55–75%",
                     ok:
@@ -1517,7 +1517,7 @@ export default function PatternAnalyzerScreen() {
                       selectedRecord.avgHumidity <= IDEAL.humMax,
                   },
                   {
-                    label: "Kabuuang Ulan",
+                    label: "Total Rainfall",
                     value: `${selectedRecord.totalRainfall}mm`,
                     ideal: "20–100mm",
                     ok:
@@ -1552,7 +1552,7 @@ export default function PatternAnalyzerScreen() {
 
           {/* Recommendations */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Mga Rekomendasyon</Text>
+            <Text style={styles.cardTitle}>Recommendations</Text>
             <Text style={styles.cardSub}>
               {monthReco
                 ? `Pagtatasa ng pagtatanim para sa ${selectedMonth} ${selectedYear}`
@@ -1619,7 +1619,7 @@ export default function PatternAnalyzerScreen() {
                     <View style={styles.allGoodBox}>
                       <Text style={styles.allGoodText}>
                         ✅ Lahat ng kondisyon ng klima ay nasa ideal na saklaw.
-                        Walang kailangang ayusin.
+                        Nothing to adjust.
                       </Text>
                     </View>
                   )}
@@ -1670,7 +1670,7 @@ export default function PatternAnalyzerScreen() {
                                 {alt.avgTemp}°C · {alt.avgHumidity}% ·{" "}
                                 {alt.totalRainfall}mm
                               </Text>
-                              <Text style={styles.altTap}>Pindutin para tingnan →</Text>
+                              <Text style={styles.altTap}>Tap to view →</Text>
                             </TouchableOpacity>
                           );
                         })}
@@ -1685,7 +1685,7 @@ export default function PatternAnalyzerScreen() {
           {/* Climate Charts */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
-              Mga Tsart ng Klima — {selectedYear}
+              Climate Charts — {selectedYear}
             </Text>
             <ScrollView
               horizontal
@@ -1695,9 +1695,9 @@ export default function PatternAnalyzerScreen() {
             >
               {(
                 [
-                  ["score", "Marka"],
-                  ["climate", "Temp at Halumig"],
-                  ["rainfall", "Ulan"],
+                  ["score", "Score"],
+                  ["climate", "Temp & Humidity"],
+                  ["rainfall", "Rainfall"],
                 ] as const
               ).map(([tab, lbl]) => (
                 <TouchableOpacity
@@ -1739,7 +1739,7 @@ export default function PatternAnalyzerScreen() {
                 right={{
                   values: chartData.map((d) => d.humidity),
                   color: colors.cyan,
-                  label: "Halumig",
+                  label: "Humidity",
                   unit: "%",
                 }}
               />
@@ -1788,7 +1788,7 @@ export default function PatternAnalyzerScreen() {
                         backgroundColor: colors.emerald,
                       }}
                     />
-                    <Text style={styles.legendSmall}>80 = Napakahusay</Text>
+                    <Text style={styles.legendSmall}>80 = Excellent</Text>
                   </View>
                   <View
                     style={{
@@ -1804,7 +1804,7 @@ export default function PatternAnalyzerScreen() {
                         backgroundColor: colors.primary,
                       }}
                     />
-                    <Text style={styles.legendSmall}>65 = Mabuti</Text>
+                    <Text style={styles.legendSmall}>65 = Good</Text>
                   </View>
                 </>
               )}
@@ -1840,7 +1840,7 @@ export default function PatternAnalyzerScreen() {
                         backgroundColor: colors.cyan,
                       }}
                     />
-                    <Text style={styles.legendSmall}>Halumig %</Text>
+                    <Text style={styles.legendSmall}>Humidity %</Text>
                   </View>
                 </>
               )}
@@ -1876,7 +1876,7 @@ export default function PatternAnalyzerScreen() {
                         backgroundColor: colors.emerald,
                       }}
                     />
-                    <Text style={styles.legendSmall}>20mm pinakamababa na ideal</Text>
+                    <Text style={styles.legendSmall}>20mm minimum ideal</Text>
                   </View>
                 </>
               )}

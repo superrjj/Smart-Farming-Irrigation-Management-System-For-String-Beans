@@ -175,17 +175,17 @@ function toYmdLocal(date: Date): string {
 }
 
 function getSoilSeverity(percent: number): string {
-  if (percent < 40) return "Tuyo";
-  if (percent <= 80) return "Mainam";
-  return "Basa";
+  if (percent < 40) return "Dry";
+  if (percent <= 80) return "Optimal";
+  return "Wet";
 }
 
 function getHumiditySeverity(value: number): string {
-  if (value < 30) return "Mababa";
+  if (value < 30) return "Low";
   if (value <= 50) return "Ideal";
-  if (value <= 60) return "Katamtaman";
-  if (value <= 70) return "Mataas";
-  return "Matindi";
+  if (value <= 60) return "Moderate";
+  if (value <= 70) return "High";
+  return "Very High";
 }
 
 // ── Design tokens ───────────────────────────────────────────────────────────
@@ -215,21 +215,23 @@ const MENU_ITEMS = [
   {
     key: "automated-irrigation",
     icon: "refresh",
-    label: "Awtomatikong Patubig",
+    label: "Automated Irrigation",
   },
-  { key: "monitoring", icon: "calendar", label: "Iskedyul ng Patubig" },
-  { key: "water-requirement", icon: "percent", label: "Pangangailangan sa Tubig" },
+  { key: "monitoring", icon: "calendar", label: "Irrigation Schedule" },
+  { key: "water-requirement", icon: "percent", label: "Water Requirement" },
   {
     key: "irrigation-history",
     icon: "folder",
-    label: "Patubig at Talaan ng Tubig",
+    label: "Irrigation & Water Logging",
   },
 ];
 
 const ANALYTICS_SUB_ITEMS = [
-  { key: "env", label: "Pagsusuri ng Pattern" },
-  { key: "seasonal", label: "Buod ng Panahon" },
+  { key: "env", label: "Pattern Analysis" },
+  { key: "seasonal", label: "Seasonal Summary" },
 ];
+
+const NO_SCHEDULE_TEXT = "No scheduled time";
 
 const DRAWER_WIDTH = Math.min(320, Dimensions.get("window").width * 0.8);
 const NOTIF_PANEL_MAX_HEIGHT = Math.min(
@@ -593,7 +595,7 @@ export default function DashboardScreen() {
       .finally(() => setForecastLoading(false));
   }, []);
 
-  const [fullName, setFullName] = useState<string>("Magsasaka");
+  const [fullName, setFullName] = useState<string>("Farmer");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [loadingName, setLoadingName] = useState<boolean>(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1062,7 +1064,7 @@ export default function DashboardScreen() {
       }
 
       if (scheduleIds.length === 0) {
-        setNextScheduleTime("Walang naka-iskedyul na oras");
+        setNextScheduleTime(NO_SCHEDULE_TEXT);
         return;
       }
 
@@ -1113,10 +1115,10 @@ export default function DashboardScreen() {
         return;
       }
 
-      setNextScheduleTime("Walang naka-iskedyul na oras");
+      setNextScheduleTime(NO_SCHEDULE_TEXT);
     } catch (e) {
       console.error("Error fetching next schedule:", e);
-      setNextScheduleTime("Walang naka-iskedyul na oras");
+      setNextScheduleTime(NO_SCHEDULE_TEXT);
     } finally {
       setScheduleLoading(false);
     }
@@ -1291,7 +1293,7 @@ export default function DashboardScreen() {
             });
             return;
           }
-          setFullName(data.name || "Magsasaka");
+          setFullName(data.name || "Farmer");
           setProfilePicture(data.profile_picture);
           setUserId(data.id);
           setProfileSource(data as UserProfileSource);
@@ -1449,7 +1451,7 @@ export default function DashboardScreen() {
                 return {
                   id,
                   type: "admin_remark",
-                  title: "Puna ng Admin",
+                  title: "Admin Remark",
                   message: String(row.text ?? ""),
                   is_read: readRemarkIds.includes(id),
                   created_at: (row.created_at as string | null) ?? null,
@@ -1560,7 +1562,7 @@ export default function DashboardScreen() {
       await fetchNotifications();
     } catch (error) {
       console.error("Error marking notifications as read:", error);
-      Alert.alert("Error", "Hindi namarkahan ang mga abiso bilang nabasa.");
+      Alert.alert("Error", "Failed to mark notifications as read.");
     }
   }, [fetchNotifications, notifications, userId]);
 
@@ -1586,17 +1588,17 @@ export default function DashboardScreen() {
         await fetchNotifications();
       } catch (error) {
         console.error("Error marking notification as read:", error);
-        Alert.alert("Error", "Hindi namarkahan ang abiso bilang nabasa.");
+        Alert.alert("Error", "Failed to mark notification as read.");
       }
     },
     [fetchNotifications, readRemarkIds, userId],
   );
 
   const handleLogout = () => {
-    Alert.alert("Mag-log out", "Sigurado ka bang gusto mong mag-log out?", [
-      { text: "Kanselahin", style: "cancel" },
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: "Mag-log Out",
+        text: "Log Out",
         style: "destructive",
         onPress: async () => {
           setMenuOpen(false);
@@ -1748,34 +1750,34 @@ export default function DashboardScreen() {
     ? null
     : soilMoisturePercent <= 25
       ? {
-          label: "Nagpapatubig — Kritikal",
+          label: "Irrigating — Critical",
           chipStyle: styles.heroChipCritical,
           textColor: "#DC2626",
           icon: "tint" as const,
         }
       : soilMoisturePercent <= 40
         ? {
-            label: "Nagpapatubig — Mababa",
+            label: "Irrigating — Low",
             chipStyle: styles.heroChipAlert,
             textColor: "#EA580C",
             icon: "tint" as const,
           }
         : soilMoisturePercent < 81
           ? {
-              label: "Nakaantay",
+              label: "Standby",
               chipStyle: styles.heroChipGood,
               textColor: "#059669",
               icon: "check-circle" as const,
             }
           : {
-              label: "Nakaantay",
+              label: "Standby",
               chipStyle: styles.heroChipInfo,
               textColor: "#2563EB",
               icon: "tint" as const,
             };
 
   // ── Build 7-day forecast items ──
-  const daysOfWeek = ["Lin", "Lun", "Mar", "Miy", "Huw", "Biy", "Sab"];
+  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const today = new Date();
   const dailyForecast = forecastData
     ? Array.from({ length: 7 }, (_, i) => {
@@ -1784,11 +1786,11 @@ export default function DashboardScreen() {
         return {
           day:
             i === 0
-              ? "Ngayon"
+              ? "Today"
               : i === 1
-                ? "Bukas"
+                ? "Tomorrow"
                 : daysOfWeek[date.getDay()],
-          date: date.toLocaleDateString("fil-PH", {
+          date: date.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
           }),
@@ -1845,7 +1847,7 @@ export default function DashboardScreen() {
               onRefresh={onRefresh}
               colors={["#3E9B4F"]} // Android spinner color
               tintColor="#3E9B4F" // iOS spinner color
-              title="Nire-refresh..." // iOS only
+              title="Refreshing..." // iOS only
               titleColor="#3E9B4F" // iOS only
             />
           }
@@ -1901,12 +1903,12 @@ export default function DashboardScreen() {
                   </>
                 ) : (
                   <>
-                    <Text style={styles.heroEyebrow}>KALAGAYAN NG SISTEMA</Text>
+                    <Text style={styles.heroEyebrow}>SYSTEM STATUS</Text>
                     <Text style={styles.heroGreeting}>
-                      Kumusta, {fullName.trim() || "Magsasaka"}
+                      Hello, {fullName.trim() || "Farmer"}
                     </Text>
                     <Text style={styles.heroSubtitle}>
-                      Sinusubaybayan ang iyong sitaw.
+                      Monitoring your string beans.
                     </Text>
                   </>
                 )}
@@ -1919,7 +1921,7 @@ export default function DashboardScreen() {
                     pressed && styles.heroAutoBadgePressed,
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel="Buksan ang kontrol ng patubig"
+                  accessibilityLabel="Open irrigation controls"
                   onPress={() =>
                     router.push({
                       pathname: "/UserManagement/waterDistribution",
@@ -1933,7 +1935,7 @@ export default function DashboardScreen() {
                     color="#fff"
                   />
                   <Text style={styles.heroAutoBadgeText}>
-                    Patubig
+                    Irrigation
                   </Text>
                 </Pressable>
               </View>
@@ -1980,9 +1982,9 @@ export default function DashboardScreen() {
                 <View style={styles.heroChipNeutral}>
                   <FontAwesome name="clock-o" size={11} color="#6B7280" />
                   <Text style={styles.heroChipNeutralText}>
-                    {nextScheduleTime === "Walang naka-iskedyul na oras"
-                      ? "Walang naka-iskedyul na oras"
-                      : `Susunod: ${nextScheduleTime}`}
+                    {nextScheduleTime === NO_SCHEDULE_TEXT
+                      ? NO_SCHEDULE_TEXT
+                      : `Next: ${nextScheduleTime}`}
                   </Text>
                 </View>
               )}
@@ -1991,7 +1993,7 @@ export default function DashboardScreen() {
 
           {/* ── Field Conditions Card ── */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Kalagayan ng Bukid</Text>
+            <Text style={styles.cardTitle}>Field Conditions</Text>
             {sensorLoading ? (
               <View style={styles.lastUpdatedSkeletonRow}>
                 <View
@@ -2023,7 +2025,7 @@ export default function DashboardScreen() {
                     color: colors.brandGrayText,
                   }}
                 >
-                  Huling na-update:{" "}
+                  Last updated:{" "}
                   {formatRelativeSecondsAgo(lastUpdated, nowTick)}
                 </Text>
               </View>
@@ -2065,10 +2067,10 @@ export default function DashboardScreen() {
                     temperatureValue < 27
                       ? "Normal"
                       : temperatureValue <= 32
-                        ? "Mag-ingat"
-                        : temperatureValue <= 41
-                          ? "Delikado"
-                          : "Napakadelikado"
+                      ? "Caution"
+                      : temperatureValue <= 41
+                        ? "Danger"
+                        : "Extreme"
                   }
                   unit="°C"
                   icon={
@@ -2096,7 +2098,7 @@ export default function DashboardScreen() {
                 size={15}
                 color={colors.brandBlueAlt}
               />
-              <Text style={styles.forecastCardTitle}>Pagtataya sa 7 Araw</Text>
+              <Text style={styles.forecastCardTitle}>7-Day Forecast</Text>
             </View>
 
             {forecastLoading ? (
@@ -2143,7 +2145,7 @@ export default function DashboardScreen() {
               </ScrollView>
             ) : (
               <Text style={styles.forecastUnavailable}>
-                Hindi available ang pagtataya.
+                Forecast not available.
               </Text>
             )}
           </View>
@@ -2163,14 +2165,14 @@ export default function DashboardScreen() {
             />
             <View style={styles.notifPanel}>
               <View style={styles.notifHeader}>
-                <Text style={styles.notifTitle}>Mga Abiso</Text>
+                <Text style={styles.notifTitle}>Notifications</Text>
                 <TouchableOpacity onPress={() => setNotifOpen(false)}>
                   <FontAwesome name="times" size={16} color="#6B7280" />
                 </TouchableOpacity>
               </View>
               {notifications.length === 0 ? (
                 <Text style={styles.notifEmptyText}>
-                  Wala pang rekomendasyon.
+                  No recommendations yet.
                 </Text>
               ) : (
                 <ScrollView
@@ -2225,7 +2227,7 @@ export default function DashboardScreen() {
                 <View style={styles.notifFooter}>
                   <TouchableOpacity onPress={markAllAsRead}>
                     <Text style={styles.markAllReadText}>
-                      Markahan lahat bilang nabasa
+                      Mark all as read
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -2244,7 +2246,7 @@ export default function DashboardScreen() {
           <View style={styles.popupBackdrop}>
             <View style={styles.popupCard}>
               <Text style={styles.popupTitle}>
-                {selectedRecommendation?.title ?? "Rekomendasyon"}
+                {selectedRecommendation?.title ?? "Recommendation"}
               </Text>
               <Text style={styles.popupMessage}>
                 {selectedRecommendation?.message ?? ""}
@@ -2313,7 +2315,7 @@ export default function DashboardScreen() {
                     color={colors.brandBlue}
                   />
                   <Text style={styles.menuItemLabel}>
-                    Analytics at Ulat
+                    Analytics & Reports
                   </Text>
                 </View>
                 <FontAwesome
@@ -2380,7 +2382,7 @@ export default function DashboardScreen() {
               >
                 <View style={styles.menuItemLeft}>
                   <FontAwesome name="cog" size={18} color={colors.brandBlue} />
-                  <Text style={styles.menuItemLabel}>Mga Setting</Text>
+                  <Text style={styles.menuItemLabel}>Settings</Text>
                 </View>
                 <FontAwesome
                   name="chevron-right"
@@ -2396,7 +2398,7 @@ export default function DashboardScreen() {
               >
                 <View style={styles.menuItemLeft}>
                   <FontAwesome name="sign-out" size={18} color="#FF3B30" />
-                  <Text style={styles.logoutLabel}>Mag-log Out</Text>
+                  <Text style={styles.logoutLabel}>Log Out</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -2406,7 +2408,7 @@ export default function DashboardScreen() {
         {loggingOut && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.loadingText}>Nagla-log out...</Text>
+            <Text style={styles.loadingText}>Logging out...</Text>
           </View>
         )}
       </View>

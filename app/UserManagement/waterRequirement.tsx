@@ -48,7 +48,7 @@ const STRING_BEANS_RECOMMENDATIONS = {
     optimal: 70,
     unit: "%",
     description:
-      "Mainam para sa sitaw ang halumig ng lupa na 60-80%. Maaaring mag-stress kung mababa sa 60%, maaaring mabulok ang ugat kung higit sa 80%.",
+      "String beans grow best with 60–80% soil moisture. Below 60% may cause stress; above 80% may lead to root rot.",
   },
   temperature: {
     min: 20,
@@ -56,7 +56,7 @@ const STRING_BEANS_RECOMMENDATIONS = {
     optimal: 25,
     unit: "°C",
     description:
-      "Ang mainam na temperatura para sa sitaw ay 20-30°C. Bumabagal ang paglago kung mababa sa 20°C at stress sa init kung higit sa 30°C.",
+      "The optimal temperature range for string beans is 20–30°C. Growth slows below 20°C and heat stress may occur above 30°C.",
   },
   humidity: {
     min: 50,
@@ -64,23 +64,23 @@ const STRING_BEANS_RECOMMENDATIONS = {
     optimal: 60,
     unit: "%",
     description:
-      "Ideal ang relative humidity na 50-70% para sa sitaw. Maaaring malanta kung masyadong mababa, maaaring dumami ang sakit kung masyadong mataas.",
+      "Relative humidity of 50–70% is ideal for string beans. Too low may cause wilting; too high may increase disease risk.",
   },
   irrigationDuration: {
     min: 15,
     max: 30,
     optimal: 20,
-    unit: "minuto",
+    unit: "minutes",
     description:
-      "Default na prototype lamang (demo). I-calibrate ang tagal para sa aktwal na bukid base sa daloy, uri ng lupa, at yugto ng pananim.",
+      "Prototype default only (demo). Calibrate duration for your actual field based on flow rate, soil type, and crop stage.",
   },
   irrigationFrequency: {
     min: 1,
     max: 3,
     optimal: 2,
-    unit: "beses/araw",
+    unit: "times/day",
     description:
-      "Default na prototype lamang (demo). I-calibrate ang dalas base sa panahon, reading ng halumig ng lupa, at season.",
+      "Prototype default only (demo). Calibrate frequency based on weather, soil moisture readings, and season.",
   },
 };
 
@@ -112,32 +112,32 @@ function collectThresholdWarnings(
   const hm = STRING_BEANS_RECOMMENDATIONS.humidity;
   if (soilMoistureMin < sm.min || soilMoistureMin > sm.max) {
     lines.push(
-      `Ang minimum na halumig ng lupa (${soilMoistureMin}%) ay labas sa inirerekomendang ${sm.min}–${sm.max}%.`,
+      `Soil moisture minimum (${soilMoistureMin}%) is outside the recommended ${sm.min}–${sm.max}%.`,
     );
   }
   if (soilMoistureMax < sm.min || soilMoistureMax > sm.max) {
     lines.push(
-      `Ang maximum na halumig ng lupa (${soilMoistureMax}%) ay labas sa inirerekomendang ${sm.min}–${sm.max}%.`,
+      `Soil moisture maximum (${soilMoistureMax}%) is outside the recommended ${sm.min}–${sm.max}%.`,
     );
   }
   if (temperatureMin < tm.min || temperatureMin > tm.max) {
     lines.push(
-      `Ang minimum na temperatura (${temperatureMin}°C) ay labas sa inirerekomendang ${tm.min}–${tm.max}°C.`,
+      `Temperature minimum (${temperatureMin}°C) is outside the recommended ${tm.min}–${tm.max}°C.`,
     );
   }
   if (temperatureMax < tm.min || temperatureMax > tm.max) {
     lines.push(
-      `Ang maximum na temperatura (${temperatureMax}°C) ay labas sa inirerekomendang ${tm.min}–${tm.max}°C.`,
+      `Temperature maximum (${temperatureMax}°C) is outside the recommended ${tm.min}–${tm.max}°C.`,
     );
   }
   if (humidityMin < hm.min || humidityMin > hm.max) {
     lines.push(
-      `Ang minimum na halumig (${humidityMin}%) ay labas sa inirerekomendang ${hm.min}–${hm.max}%.`,
+      `Humidity minimum (${humidityMin}%) is outside the recommended ${hm.min}–${hm.max}%.`,
     );
   }
   if (humidityMax < hm.min || humidityMax > hm.max) {
     lines.push(
-      `Ang maximum na halumig (${humidityMax}%) ay labas sa inirerekomendang ${hm.min}–${hm.max}%.`,
+      `Humidity maximum (${humidityMax}%) is outside the recommended ${hm.min}–${hm.max}%.`,
     );
   }
   return lines;
@@ -205,7 +205,7 @@ function InputField({
       {description && <Text style={styles.descriptionText}>{description}</Text>}
       {hasWarning && recommended && (
         <Text style={styles.warningText}>
-          ⚠️ Labas sa inirerekomendang saklaw ({recommended.min}–{recommended.max}
+          ⚠️ Outside recommended range ({recommended.min}–{recommended.max}
           {unit})
         </Text>
       )}
@@ -289,7 +289,7 @@ function RangeInput({
           <Text style={styles.rangeUnit}>{unit}</Text>
         </View>
         <View style={styles.rangeSeparator}>
-          <Text style={styles.rangeSeparatorText}>hanggang</Text>
+          <Text style={styles.rangeSeparatorText}>to</Text>
         </View>
         <View style={styles.rangeInputContainer}>
           <Text style={styles.rangeLabel}>Max</Text>
@@ -310,12 +310,12 @@ function RangeInput({
       </View>
       {orderInvalid && (
         <Text style={styles.warningText}>
-          ⚠️ Ang minimum ay dapat mas mababa kaysa maximum.
+          ⚠️ Minimum must be lower than maximum.
         </Text>
       )}
       {showRangeWarning && recommended && !orderInvalid && (
         <Text style={styles.warningText}>
-          ⚠️ Isa o parehong halaga ay labas sa inirerekomendang saklaw (
+          ⚠️ One or both values are outside the recommended range (
           {recommended.min}–{recommended.max}
           {unit}).
         </Text>
@@ -428,7 +428,7 @@ export default function WaterRequirementScreen() {
   const persistWaterRequirements = useCallback(
     async (p: WaterRequirementPayload) => {
       if (!userId) {
-        Alert.alert("Error", "Hindi nahanap ang user");
+        Alert.alert("Error", "User not found");
         return;
       }
       setSaving(true);
@@ -457,8 +457,8 @@ export default function WaterRequirementScreen() {
             error.message?.includes("Could not find the table")
           ) {
             Alert.alert(
-              "Hindi Nahanap ang Table",
-              "Wala pa ang water_requirements table sa database. Gumawa muna gamit ang SQL script sa DATABASE_SCHEMA.md",
+              "Table Not Found",
+              "The water_requirements table is not in the database yet. Create it using the SQL script in DATABASE_SCHEMA.md",
               [{ text: "OK" }],
             );
           } else {
@@ -467,14 +467,14 @@ export default function WaterRequirementScreen() {
           return;
         }
 
-        Alert.alert("Tagumpay", "Na-save ang pangangailangan sa tubig!", [
+        Alert.alert("Success", "Water requirements saved!", [
           { text: "OK", onPress: () => router.back() },
         ]);
       } catch (error: any) {
         console.error("Error saving requirements:", error);
         Alert.alert(
           "Error",
-          error.message || "Hindi na-save ang pangangailangan sa tubig",
+          error.message || "Failed to save water requirements",
         );
       } finally {
         setSaving(false);
@@ -487,12 +487,12 @@ export default function WaterRequirementScreen() {
     const parseValue = (value: string, label: string): number | null => {
       const trimmed = value.trim();
       if (!trimmed) {
-        Alert.alert("Error", `Kailangan ang ${label}`);
+        Alert.alert("Error", `${label} is required`);
         return null;
       }
       const parsed = Number(trimmed);
       if (Number.isNaN(parsed)) {
-        Alert.alert("Error", `Dapat wastong numero ang ${label}`);
+        Alert.alert("Error", `${label} must be a valid number`);
         return null;
       }
       return parsed;
@@ -505,59 +505,59 @@ export default function WaterRequirementScreen() {
     if (soilMoistureMin === null) return;
     const soilMoistureMax = parseValue(
       requirements.soilMoistureMax,
-      "maximum na halumig ng lupa",
+      "soil moisture maximum",
     );
     if (soilMoistureMax === null) return;
     const temperatureMin = parseValue(
       requirements.temperatureMin,
-      "minimum na temperatura",
+      "temperature minimum",
     );
     if (temperatureMin === null) return;
     const temperatureMax = parseValue(
       requirements.temperatureMax,
-      "maximum na temperatura",
+      "temperature maximum",
     );
     if (temperatureMax === null) return;
     const humidityMin = parseValue(
       requirements.humidityMin,
-      "minimum na halumig",
+      "humidity minimum",
     );
     if (humidityMin === null) return;
     const humidityMax = parseValue(
       requirements.humidityMax,
-      "maximum na halumig",
+      "humidity maximum",
     );
     if (humidityMax === null) return;
     const irrigationDuration = parseValue(
       requirements.irrigationDuration,
-      "tagal ng patubig",
+      "irrigation duration",
     );
     if (irrigationDuration === null) return;
     const irrigationFrequency = parseValue(
       requirements.irrigationFrequency,
-      "dalas ng patubig",
+      "irrigation frequency",
     );
     if (irrigationFrequency === null) return;
 
     if (soilMoistureMin >= soilMoistureMax) {
-      Alert.alert("Error", "Ang minimum na halumig ng lupa ay dapat mas mababa kaysa maximum");
+      Alert.alert("Error", "Soil moisture minimum must be lower than maximum");
       return;
     }
 
     if (temperatureMin >= temperatureMax) {
-      Alert.alert("Error", "Ang minimum na temperatura ay dapat mas mababa kaysa maximum");
+      Alert.alert("Error", "Temperature minimum must be lower than maximum");
       return;
     }
 
     if (humidityMin >= humidityMax) {
-      Alert.alert("Error", "Ang minimum na halumig ay dapat mas mababa kaysa maximum");
+      Alert.alert("Error", "Humidity minimum must be lower than maximum");
       return;
     }
 
     if (irrigationDuration < 5 || irrigationDuration > 60) {
       Alert.alert(
         "Error",
-        "Ang tagal ng patubig ay dapat 5 hanggang 60 minuto",
+        "Irrigation duration must be between 5 and 60 minutes",
       );
       return;
     }
@@ -565,7 +565,7 @@ export default function WaterRequirementScreen() {
     if (irrigationFrequency < 1 || irrigationFrequency > 5) {
       Alert.alert(
         "Error",
-        "Ang dalas ng patubig ay dapat 1 hanggang 5 beses bawat araw",
+        "Irrigation frequency must be between 1 and 5 times per day",
       );
       return;
     }
@@ -592,12 +592,12 @@ export default function WaterRequirementScreen() {
 
     if (thresholdWarnings.length > 0) {
       Alert.alert(
-        "Babala sa threshold",
-        `${thresholdWarnings.join("\n\n")}\n\nMaaari mong ayusin ang mga halaga o i-save pa rin.`,
+        "Threshold Warning",
+        `${thresholdWarnings.join("\n\n")}\n\nYou can adjust the values or save anyway.`,
         [
-          { text: "Suriin", style: "cancel" },
+          { text: "Review", style: "cancel" },
           {
-            text: "I-save pa rin",
+            text: "Save Anyway",
             onPress: () => {
               void persistWaterRequirements(payload);
             },
@@ -654,17 +654,17 @@ export default function WaterRequirementScreen() {
             <FontAwesome name="chevron-left" size={18} color={colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            Pangangailangan sa Tubig
+            Water Requirement
           </Text>
           <TouchableOpacity
             onPress={() => setResetModalVisible(true)}
             style={styles.resetButton}
             hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
             accessibilityRole="button"
-            accessibilityLabel="Burahin ang lahat ng field para maglagay ng bagong pangangailangan sa tubig"
+            accessibilityLabel="Clear all fields to enter new water requirements"
           >
             <FontAwesome name="eraser" size={15} color={colors.primary} />
-            <Text style={styles.resetButtonLabel}>Burahin</Text>
+            <Text style={styles.resetButtonLabel}>Clear</Text>
           </TouchableOpacity>
         </View>
 
@@ -682,21 +682,21 @@ export default function WaterRequirementScreen() {
                 size={20}
                 color={colors.brandBlue}
               />
-              <Text style={styles.infoTitle}>Mga Pangangailangan ng Sitaw</Text>
+              <Text style={styles.infoTitle}>String Bean Requirements</Text>
             </View>
             <Text style={styles.infoText}>
-              Magtakda ng sariling threshold para sa pananim. Maaaring i-edit ang
-              mga field at gamitin ang hint bilang gabay. Ipinapakita ang
-              inirerekomendang saklaw bilang sanggunian. Ang tagal/dalas ng patubig
-              ay prototype demo lamang at dapat i-calibrate bago gamitin sa bukid.
+              Set your own crop thresholds. Fields can be edited and hints used
+              as guidance. Recommended ranges are shown for reference. Irrigation
+              duration/frequency are prototype defaults and should be calibrated
+              before field use.
             </Text>
           </View>
 
           {/* Soil Moisture Range */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Threshold ng Halumig ng Lupa</Text>
+            <Text style={styles.sectionTitle}>Soil Moisture Threshold</Text>
             <RangeInput
-              label="Halumig ng Lupa"
+              label="Soil Moisture"
               minValue={requirements.soilMoistureMin}
               maxValue={requirements.soilMoistureMax}
               onMinChange={(value) =>
@@ -717,9 +717,9 @@ export default function WaterRequirementScreen() {
 
           {/* Temperature Range */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Threshold ng Temperatura</Text>
+            <Text style={styles.sectionTitle}>Temperature Threshold</Text>
             <RangeInput
-              label="Temperatura"
+              label="Temperature"
               minValue={requirements.temperatureMin}
               maxValue={requirements.temperatureMax}
               onMinChange={(value) =>
@@ -738,9 +738,9 @@ export default function WaterRequirementScreen() {
 
           {/* Humidity Range */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Threshold ng Halumig</Text>
+            <Text style={styles.sectionTitle}>Humidity Threshold</Text>
             <RangeInput
-              label="Halumig"
+              label="Humidity"
               minValue={requirements.humidityMin}
               maxValue={requirements.humidityMax}
               onMinChange={(value) =>
@@ -759,14 +759,14 @@ export default function WaterRequirementScreen() {
 
           {/* Irrigation Settings */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Mga Setting ng Patubig</Text>
+            <Text style={styles.sectionTitle}>Irrigation Settings</Text>
             <InputField
-              label="Tagal ng Patubig"
+              label="Irrigation Duration"
               value={requirements.irrigationDuration}
               onChange={(value) =>
                 setRequirements({ ...requirements, irrigationDuration: value })
               }
-              unit="minuto"
+              unit="minutes"
               hint="e.g. 20"
               inputStyle={styles.irrigationInput}
               description={
@@ -774,12 +774,12 @@ export default function WaterRequirementScreen() {
               }
             />
             <InputField
-              label="Dalas ng Patubig"
+              label="Irrigation Frequency"
               value={requirements.irrigationFrequency}
               onChange={(value) =>
                 setRequirements({ ...requirements, irrigationFrequency: value })
               }
-              unit="beses/araw"
+              unit="times/day"
               hint="e.g. 2"
               inputStyle={styles.irrigationInput}
               description={
@@ -804,7 +804,7 @@ export default function WaterRequirementScreen() {
                   color="#fff"
                   style={styles.saveButtonIcon}
                 />
-                <Text style={styles.saveButtonText}>I-save ang Pangangailangan</Text>
+                <Text style={styles.saveButtonText}>Save Requirements</Text>
               </>
             )}
           </TouchableOpacity>
@@ -827,11 +827,10 @@ export default function WaterRequirementScreen() {
               <View style={styles.resetModalIconWrap}>
                 <FontAwesome name="eraser" size={22} color={colors.primary} />
               </View>
-              <Text style={styles.resetModalTitle}>Burahin ang lahat ng field?</Text>
+              <Text style={styles.resetModalTitle}>Clear all fields?</Text>
               <Text style={styles.resetModalMessage}>
-                Mabubura ang lahat ng halaga sa form para makapaglagay ng bagong
-                pangangailangan sa tubig. Hindi mabubura ang na-save na data hanggang
-                pindutin ang I-save.
+                All values in the form will be cleared so you can enter new water
+                requirements. Saved data is not removed until you tap Save.
               </Text>
               <View style={styles.resetModalActions}>
                 <TouchableOpacity
@@ -839,14 +838,14 @@ export default function WaterRequirementScreen() {
                   onPress={() => setResetModalVisible(false)}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.resetModalCancelText}>Kanselahin</Text>
+                  <Text style={styles.resetModalCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.resetModalConfirm}
                   onPress={clearAllRequirementFields}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.resetModalConfirmText}>Burahin lahat</Text>
+                  <Text style={styles.resetModalConfirmText}>Clear All</Text>
                 </TouchableOpacity>
               </View>
             </Pressable>

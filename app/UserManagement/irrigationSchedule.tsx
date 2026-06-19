@@ -17,7 +17,7 @@ import {
 import { getLoggedInEmail } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import { FontAwesome } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -112,6 +112,13 @@ interface DateSchedule {
   month: number;
   year: number;
   schedules: { id: string; time: string }[];
+}
+
+interface HistoryDateGroup {
+  day: number;
+  month: number;
+  year: number;
+  schedules: { id: string; time: string; isPast: boolean }[];
 }
 
 // ─── Sensor Progress Card ─────────────────────────────────────────────────────
@@ -298,6 +305,7 @@ export default function IrrigationScheduleScreen() {
   const realtimeRefreshTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const scheduleFetchSeqRef = useRef(0);
 
   const [soilMoisture, setSoilMoisture] = useState(0);
   const [temperature, setTemperature] = useState(0);
@@ -305,7 +313,16 @@ export default function IrrigationScheduleScreen() {
   const [irrigationSystem, setIrrigationSystem] =
     useState<IrrigationSystemRow | null>(null);
   const [supportsAutoModeColumn, setSupportsAutoModeColumn] = useState(true);
+  const [farmSetupModalVisible, setFarmSetupModalVisible] = useState(false);
+  const [requiresFarmSetup, setRequiresFarmSetup] = useState(false);
+  const [historyModalVisible, setHistoryModalVisible] = useState(false);
+  const [historyGroups, setHistoryGroups] = useState<HistoryDateGroup[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const firedScheduleSlotsRef = useRef(new Set<string>());
+
+  const isFarmSetupRequired = (failureReason?: string) =>
+    !!failureReason &&
+    failureReason.toLowerCase().includes("farm not found");
 
   useEffect(() => {
     void (async () => {
@@ -314,15 +331,30 @@ export default function IrrigationScheduleScreen() {
     })();
   }, [routeEmail]);
 
-  const syncIrrigationSystemState = useCallback(async () => {
-    if (!userId && !accountEmail) return;
-    const { system, supportsAutoMode } = await resolveIrrigationSystem({
-      email: accountEmail,
-      userId,
-    });
-    setSupportsAutoModeColumn(supportsAutoMode);
-    setIrrigationSystem(system);
-  }, [accountEmail, userId]);
+  const syncIrrigationSystemState = useCallback(
+    async (options?: { promptFarmSetup?: boolean }) => {
+      if (!userId && !accountEmail) return;
+      const { system, supportsAutoMode, failureReason } =
+        await resolveIrrigationSystem({
+          email: accountEmail,
+          userId,
+        });
+      setSupportsAutoModeColumn(supportsAutoMode);
+      setIrrigationSystem(system);
+      if (system) {
+        setRequiresFarmSetup(false);
+        setFarmSetupModalVisible(false);
+      } else if (isFarmSetupRequired(failureReason)) {
+        setRequiresFarmSetup(true);
+        if (options?.promptFarmSetup !== false) {
+          setFarmSetupModalVisible(true);
+        }
+      } else {
+        setRequiresFarmSetup(false);
+      }
+    },
+    [accountEmail, userId],
+  );
 
   /** Save schedule → force MANUAL (AUTOMATIC → MANUAL when currently auto). */
   const ensureManualModeForSchedule = useCallback(async () => {
@@ -349,6 +381,26 @@ export default function IrrigationScheduleScreen() {
   useEffect(() => {
     if (userId || accountEmail) void syncIrrigationSystemState();
   }, [syncIrrigationSystemState, userId, accountEmail]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (userId || accountEmail) void syncIrrigationSystemState();
+    }, [syncIrrigationSystemState, userId, accountEmail]),
+  );
+
+  const handleFarmSetupSet = () => {
+    setFarmSetupModalVisible(false);
+    router.push({
+      pathname: "/UserManagement/farmerProfile",
+      params: { email: accountEmail },
+    });
+  };
+
+  const guardFarmSetupForSchedule = useCallback(() => {
+    if (!requiresFarmSetup) return true;
+    setFarmSetupModalVisible(true);
+    return false;
+  }, [requiresFarmSetup]);
 
   // ─── Admin Remarks ────────────────────────────────────────────────────────
   const [adminRemarks, setAdminRemarks] = useState<Map<string, string>>(
@@ -540,7 +592,14 @@ export default function IrrigationScheduleScreen() {
   }, [userId]);
 
   useEffect(() => {
-    if (currentScheduleId && userId) fetchScheduledDates(currentScheduleId);
+    if (currentScheduleId && userId) {
+      void fetchScheduledDates(
+        currentScheduleId,
+        false,
+        currentMonth,
+        currentYear,
+      );
+    }
   }, [currentMonth, currentYear, currentScheduleId]);
 
   useEffect(() => {
@@ -557,7 +616,12 @@ export default function IrrigationScheduleScreen() {
       // Batch bursts of realtime events into one refresh.
       realtimeRefreshTimeoutRef.current = setTimeout(() => {
         void fetchTimeSchedules(currentScheduleId);
-        void fetchScheduledDates(currentScheduleId);
+        void fetchScheduledDates(
+          currentScheduleId,
+          false,
+          currentMonth,
+          currentYear,
+        );
       }, 150);
     };
 
@@ -728,21 +792,28 @@ export default function IrrigationScheduleScreen() {
   const fetchScheduledDates = async (
     scheduleId: string,
     showLoading = false,
+    viewedMonth = currentMonth,
+    viewedYear = currentYear,
   ) => {
+    const fetchSeq = ++scheduleFetchSeqRef.current;
     try {
       if (showLoading) setLoading(true);
       const phToday = getPhilippinesTodayYmd();
       const todayMonth = phToday.month;
       const todayYear = phToday.year;
       const todayDay = phToday.day;
+      const viewingTodayMonth =
+        viewedMonth + 1 === todayMonth && viewedYear === todayYear;
 
       const { data, error } = await supabase
         .from("irrigation_scheduled_dates")
         .select("id, day, month, year, time")
         .eq("schedule_id", scheduleId)
-        .eq("month", currentMonth + 1)
-        .eq("year", currentYear)
+        .eq("month", viewedMonth + 1)
+        .eq("year", viewedYear)
         .order("day, time");
+
+      if (fetchSeq !== scheduleFetchSeqRef.current) return;
 
       if (error) {
         if (error.code === "42703" && error.message.includes("time")) {
@@ -750,9 +821,10 @@ export default function IrrigationScheduleScreen() {
             .from("irrigation_scheduled_dates")
             .select("id, day, month, year")
             .eq("schedule_id", scheduleId)
-            .eq("month", currentMonth + 1)
-            .eq("year", currentYear)
+            .eq("month", viewedMonth + 1)
+            .eq("year", viewedYear)
             .order("day");
+          if (fetchSeq !== scheduleFetchSeqRef.current) return;
           if (e2) throw e2;
           const schedulesMap = new Map<string, DateSchedule>();
           (d2 || []).forEach((d) => {
@@ -806,46 +878,37 @@ export default function IrrigationScheduleScreen() {
         time: d.time || "Not set",
       }));
 
-      const { data: todayData, error: todayError } = await supabase
-        .from("irrigation_scheduled_dates")
-        .select("id, day, month, year, time")
-        .eq("schedule_id", scheduleId)
-        .eq("month", todayMonth)
-        .eq("year", todayYear)
-        .eq("day", todayDay)
-        .order("time");
+      // Keep today's slots for the TIME SCHEDULE card when browsing other months.
+      if (!viewingTodayMonth) {
+        const { data: todayData, error: todayError } = await supabase
+          .from("irrigation_scheduled_dates")
+          .select("id, day, month, year, time")
+          .eq("schedule_id", scheduleId)
+          .eq("month", todayMonth)
+          .eq("year", todayYear)
+          .eq("day", todayDay)
+          .order("time");
 
-      if (!todayError && todayData && todayData.length > 0) {
-        const todayDateKey = `${todayYear}-${todayMonth}-${todayDay}`;
-        if (!schedulesMap.has(todayDateKey))
+        if (fetchSeq !== scheduleFetchSeqRef.current) return;
+
+        if (!todayError && todayData && todayData.length > 0) {
+          const todayDateKey = `${todayYear}-${todayMonth}-${todayDay}`;
           schedulesMap.set(todayDateKey, {
             day: todayDay,
             month: todayMonth,
             year: todayYear,
-            schedules: [],
-          });
-        const todaySchedule = schedulesMap.get(todayDateKey)!;
-        todaySchedule.schedules = [];
-        todayData.forEach((d) => {
-          todaySchedule.schedules.push({ id: d.id, time: d.time || "Not set" });
-          if (!formattedDates.find((fd) => fd.id === d.id)) {
-            formattedDates.push({
+            schedules: todayData.map((d) => ({
               id: d.id,
-              day: d.day,
-              month: d.month,
-              year: d.year,
               time: d.time || "Not set",
-            });
-          }
-        });
-      } else if (!todayError) {
-        const todayDateKey = `${todayYear}-${todayMonth}-${todayDay}`;
-        if (schedulesMap.has(todayDateKey)) schedulesMap.delete(todayDateKey);
+            })),
+          });
+        }
       }
 
-      const newSchedulesMap = new Map(schedulesMap);
+      if (fetchSeq !== scheduleFetchSeqRef.current) return;
+
       setScheduledDates(formattedDates);
-      setDateSchedules(newSchedulesMap);
+      setDateSchedules(new Map(schedulesMap));
       if (scheduleId) await syncIrrigationNotifications(scheduleId);
     } catch (error) {
       console.error("Error fetching scheduled dates:", error);
@@ -854,20 +917,7 @@ export default function IrrigationScheduleScreen() {
     }
   };
 
-  const canGoPrevMonth = () => {
-    const currentDate = new Date();
-    const prevMonthDate =
-      currentMonth === 0
-        ? new Date(currentYear - 1, 11)
-        : new Date(currentYear, currentMonth - 1);
-    return (
-      prevMonthDate >=
-      new Date(currentDate.getFullYear(), currentDate.getMonth())
-    );
-  };
-
   const goToPrevMonth = () => {
-    if (!canGoPrevMonth()) return;
     if (currentMonth === 0) {
       setCurrentMonth(11);
       setCurrentYear(currentYear - 1);
@@ -892,16 +942,7 @@ export default function IrrigationScheduleScreen() {
   const isDateScheduled = (day: number) => {
     const dateKey = `${currentYear}-${currentMonth + 1}-${day}`;
     const schedule = dateSchedules.get(dateKey);
-    if (!schedule) return false;
-    return schedule.schedules.some(
-      (entry) =>
-        !isScheduleTimePast(
-          schedule.year,
-          schedule.month,
-          schedule.day,
-          entry.time,
-        ),
-    );
+    return Boolean(schedule?.schedules.length);
   };
 
   const handleDateClick = (day: number) => {
@@ -931,6 +972,7 @@ export default function IrrigationScheduleScreen() {
     currentYear === today.getFullYear();
 
   const handleAddSchedule = () => {
+    if (!guardFarmSetupForSchedule()) return;
     setNewScheduleDates([]);
     setNewScheduleTimes([]);
     setNewScheduleTime("08:00");
@@ -975,6 +1017,7 @@ export default function IrrigationScheduleScreen() {
   };
 
   const addNewSchedule = async () => {
+    if (!guardFarmSetupForSchedule()) return;
     if (
       !currentScheduleId ||
       newScheduleDates.length === 0 ||
@@ -1116,7 +1159,12 @@ export default function IrrigationScheduleScreen() {
         setDateSchedules(new Map(currentMap));
         setTimeout(() => updateTodayStats(), 10);
       }
-      await fetchScheduledDates(currentScheduleId);
+      await fetchScheduledDates(
+        currentScheduleId,
+        false,
+        currentMonth,
+        currentYear,
+      );
       invalidateTodayScheduleSlotsCache();
       await ensureManualModeForSchedule();
       setAddScheduleModalVisible(false);
@@ -1129,28 +1177,6 @@ export default function IrrigationScheduleScreen() {
       Alert.alert("Error", "Failed to add schedule");
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const deleteScheduleDate = async (scheduleId: string) => {
-    try {
-      const { error } = await supabase
-        .from("irrigation_scheduled_dates")
-        .delete()
-        .eq("id", scheduleId);
-      if (error) throw error;
-      if (currentScheduleId) await fetchScheduledDates(currentScheduleId);
-      setScheduleInfoModalVisible(false);
-      Alert.alert(
-        "Schedule Deleted",
-        "The schedule has been successfully deleted.",
-      );
-    } catch (error) {
-      console.error("Error deleting schedule:", error);
-      Alert.alert(
-        "Deletion Failed",
-        "Unable to delete the schedule. Please try again or contact support if the issue persists.",
-      );
     }
   };
 
@@ -1356,56 +1382,11 @@ export default function IrrigationScheduleScreen() {
   };
 
   const handleAlarmOK = async () => {
-    if (!alarmScheduleData || !currentScheduleId) {
-      setAlarmModalVisible(false);
-      setAlarmScheduleData(null);
-      return;
-    }
-    try {
-      const dateKey = `${alarmScheduleData.year}-${alarmScheduleData.month}-${alarmScheduleData.day}`;
-      const dateSchedule = dateSchedules.get(dateKey);
-      let scheduleEntryId: string | null = null;
-      if (dateSchedule) {
-        const entry = dateSchedule.schedules.find(
-          (s) => s.time === alarmScheduleData.time,
-        );
-        if (entry) scheduleEntryId = entry.id;
-      }
-      if (!scheduleEntryId) {
-        const { data: sd, error: qe } = await supabase
-          .from("irrigation_scheduled_dates")
-          .select("id")
-          .eq("schedule_id", currentScheduleId)
-          .eq("day", alarmScheduleData.day)
-          .eq("month", alarmScheduleData.month)
-          .eq("year", alarmScheduleData.year)
-          .eq("time", alarmScheduleData.time)
-          .limit(1)
-          .single();
-        if (!qe && sd) scheduleEntryId = sd.id;
-      }
-      if (scheduleEntryId) {
-        const { error } = await supabase
-          .from("irrigation_scheduled_dates")
-          .delete()
-          .eq("id", scheduleEntryId);
-        if (error) throw error;
-      }
-      await fetchScheduledDates(currentScheduleId);
-      setAlarmModalVisible(false);
-      setAlarmScheduleData(null);
-    } catch (error) {
-      console.error("Error deleting schedule from alarm:", error);
-      Alert.alert(
-        "Dismissal Failed",
-        "Unable to dismiss the schedule. Please try again or contact support if the issue persists.",
-      );
-      setAlarmModalVisible(false);
-      setAlarmScheduleData(null);
-    }
+    setAlarmModalVisible(false);
+    setAlarmScheduleData(null);
   };
 
-  /** True if this date+time is already over (for gray styling; delete still allowed). */
+  /** True if this date+time is already over (for gray styling / Completed label). */
   const isScheduleTimePast = (
     year: number,
     month: number,
@@ -1423,6 +1404,64 @@ export default function IrrigationScheduleScreen() {
     const timeMin = timeToMinutes(timeStr);
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     return timeMin <= currentMinutes;
+  };
+
+  const openScheduleHistory = async () => {
+    if (!currentScheduleId) {
+      Alert.alert(
+        "No Schedule",
+        "Your irrigation schedule is not ready yet. Please try again in a moment.",
+      );
+      return;
+    }
+    setHistoryModalVisible(true);
+    setHistoryLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("irrigation_scheduled_dates")
+        .select("id, day, month, year, time")
+        .eq("schedule_id", currentScheduleId)
+        .order("year", { ascending: false })
+        .order("month", { ascending: false })
+        .order("day", { ascending: false })
+        .order("time", { ascending: false });
+      if (error) throw error;
+
+      const groupsMap = new Map<string, HistoryDateGroup>();
+      for (const row of data || []) {
+        const dateKey = `${row.year}-${row.month}-${row.day}`;
+        const time = row.time || "Not set";
+        if (!groupsMap.has(dateKey)) {
+          groupsMap.set(dateKey, {
+            day: row.day,
+            month: row.month,
+            year: row.year,
+            schedules: [],
+          });
+        }
+        groupsMap.get(dateKey)!.schedules.push({
+          id: row.id,
+          time,
+          isPast: isScheduleTimePast(row.year, row.month, row.day, time),
+        });
+      }
+
+      const groups = Array.from(groupsMap.values()).sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        if (a.month !== b.month) return b.month - a.month;
+        return b.day - a.day;
+      });
+      setHistoryGroups(groups);
+    } catch (error) {
+      console.error("Error loading schedule history:", error);
+      setHistoryGroups([]);
+      Alert.alert(
+        "History Unavailable",
+        "Unable to load your irrigation history. Please check your connection and try again.",
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   // Get today's scheduled times list for TIME SCHEDULE card
@@ -1451,7 +1490,13 @@ export default function IrrigationScheduleScreen() {
             <FontAwesome name="chevron-left" size={18} color={colors.dark} />
           </TouchableOpacity>
           <Text style={styles.topBarTitle}>IRRIGATION SCHEDULE</Text>
-          <View style={styles.placeholder} />
+          <TouchableOpacity
+            onPress={() => void openScheduleHistory()}
+            style={styles.historyHeaderButton}
+            accessibilityLabel="View irrigation history"
+          >
+            <FontAwesome name="history" size={18} color={colors.primaryDark} />
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -1462,20 +1507,16 @@ export default function IrrigationScheduleScreen() {
           {/* ── Calendar ── */}
           <View style={styles.calendarSection}>
             <View style={styles.monthNav}>
-              {canGoPrevMonth() ? (
-                <TouchableOpacity
-                  onPress={goToPrevMonth}
-                  style={styles.navButton}
-                >
-                  <FontAwesome
-                    name="chevron-left"
-                    size={16}
-                    color={colors.grayText}
-                  />
-                </TouchableOpacity>
-              ) : (
-                <View style={[styles.navButton, styles.navButtonDisabled]} />
-              )}
+              <TouchableOpacity
+                onPress={goToPrevMonth}
+                style={styles.navButton}
+              >
+                <FontAwesome
+                  name="chevron-left"
+                  size={16}
+                  color={colors.grayText}
+                />
+              </TouchableOpacity>
               <Text style={styles.monthTitle}>
                 {MONTHS[currentMonth].toUpperCase()}
               </Text>
@@ -1521,7 +1562,9 @@ export default function IrrigationScheduleScreen() {
                     disabled={
                       day === null ||
                       (isPast &&
-                        !isDateScheduled(day ?? 0) &&
+                        !dateSchedules.has(
+                          `${currentYear}-${currentMonth + 1}-${day}`,
+                        ) &&
                         !adminRemarks.has(
                           `${currentYear}-${currentMonth + 1}-${day}`,
                         ))
@@ -1565,7 +1608,7 @@ export default function IrrigationScheduleScreen() {
                     { backgroundColor: colors.grayText },
                   ]}
                 />
-                <Text style={styles.legendText}>Available</Text>
+                <Text style={styles.legendText}>Completed</Text>
               </View>
               <View style={styles.legendItem}>
                 <View
@@ -1575,6 +1618,20 @@ export default function IrrigationScheduleScreen() {
               </View>
             </View>
           )}
+
+          <TouchableOpacity
+            style={styles.viewHistoryButton}
+            onPress={() => void openScheduleHistory()}
+            activeOpacity={0.8}
+          >
+            <FontAwesome name="history" size={16} color={colors.primaryDark} />
+            <Text style={styles.viewHistoryButtonText}>View History</Text>
+            <FontAwesome
+              name="chevron-right"
+              size={12}
+              color={colors.grayText}
+            />
+          </TouchableOpacity>
 
           {/* ── TIME SCHEDULE Card ── */}
           <View style={styles.timeScheduleCard}>
@@ -1632,7 +1689,16 @@ export default function IrrigationScheduleScreen() {
         </ScrollView>
 
         {/* ── FAB ── */}
-        <TouchableOpacity style={styles.fab} onPress={handleAddSchedule}>
+        <TouchableOpacity
+          style={[styles.fab, requiresFarmSetup && styles.fabDisabled]}
+          onPress={handleAddSchedule}
+          disabled={requiresFarmSetup}
+          accessibilityLabel={
+            requiresFarmSetup
+              ? "Set up farm information before adding a schedule"
+              : "Add irrigation schedule"
+          }
+        >
           <FontAwesome name="plus" size={24} color={colors.white} />
         </TouchableOpacity>
 
@@ -1924,51 +1990,21 @@ export default function IrrigationScheduleScreen() {
                 (() => {
                   const rows = selectedScheduleInfo.schedules;
 
-                  const now = new Date();
-                  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-                  const selectedStart = new Date(
-                    selectedScheduleInfo.year,
-                    selectedScheduleInfo.month - 1,
-                    selectedScheduleInfo.day,
-                  );
-                  selectedStart.setHours(0, 0, 0, 0);
-
-                  const todayStart = new Date();
-                  todayStart.setHours(0, 0, 0, 0);
-
-                  const isTodaySelected =
-                    selectedScheduleInfo.year === now.getFullYear() &&
-                    selectedScheduleInfo.month === now.getMonth() + 1 &&
-                    selectedScheduleInfo.day === now.getDate();
-
-                  // Hide schedules when:
-                  // - the selected date is in the past, OR
-                  // - the selected date is today and the time has already passed.
-                  const filteredRows =
-                    selectedStart.getTime() < todayStart.getTime()
-                      ? []
-                      : isTodaySelected
-                        ? rows.filter(
-                            (r) => timeToMinutes(r.time) > currentMinutes,
-                          )
-                        : rows;
-
                   const remarkKey = `${selectedScheduleInfo.year}-${selectedScheduleInfo.month}-${selectedScheduleInfo.day}`;
                   const adminRemark = adminRemarks.get(remarkKey);
 
-                  if (filteredRows.length === 0 && !adminRemark)
+                  if (rows.length === 0 && !adminRemark)
                     return (
                       <View style={styles.scheduleInfoBody}>
                         <Text style={styles.noSchedulesText}>
-                          No upcoming schedules for this date.
+                          No schedules for this date.
                         </Text>
                       </View>
                     );
 
                   return (
                     <View style={styles.scheduleInfoBody}>
-                      {filteredRows.length > 0 && (
+                      {rows.length > 0 && (
                         <>
                           <View style={styles.infoRow}>
                             <FontAwesome
@@ -1994,32 +2030,37 @@ export default function IrrigationScheduleScreen() {
                             <View style={styles.infoContent}>
                               <Text style={styles.infoLabel}>Time(s)</Text>
                               <Text style={styles.infoHintPast}>
-                                Past dates/times are hidden.
+                                All schedules are kept in your history and are
+                                never removed from the database.
                               </Text>
                               <View style={styles.timesList}>
-                                {filteredRows.map((schedule) => (
+                                {rows.map((schedule) => {
+                                  const isPast = isScheduleTimePast(
+                                    selectedScheduleInfo.year,
+                                    selectedScheduleInfo.month,
+                                    selectedScheduleInfo.day,
+                                    schedule.time,
+                                  );
+                                  return (
                                   <View
                                     key={schedule.id}
-                                    style={styles.timeItem}
+                                    style={[
+                                      styles.timeItem,
+                                      isPast && styles.timeItemPast,
+                                    ]}
                                   >
-                                    <Text style={styles.timeItemText}>
-                                      {schedule.time}
-                                    </Text>
-                                    <TouchableOpacity
-                                      style={styles.timeItemDeleteButton}
-                                      onPress={() =>
-                                        deleteScheduleDate(schedule.id)
-                                      }
-                                      accessibilityLabel="Delete schedule"
+                                    <Text
+                                      style={[
+                                        styles.timeItemText,
+                                        isPast && styles.timeItemTextPast,
+                                      ]}
                                     >
-                                      <FontAwesome
-                                        name="times"
-                                        size={12}
-                                        color="#EF4444"
-                                      />
-                                    </TouchableOpacity>
+                                      {schedule.time}
+                                      {isPast ? " · Completed" : " · Upcoming"}
+                                    </Text>
                                   </View>
-                                ))}
+                                  );
+                                })}
                               </View>
                             </View>
                           </View>
@@ -2043,6 +2084,134 @@ export default function IrrigationScheduleScreen() {
                     </View>
                   );
                 })()}
+            </View>
+          </View>
+        </Modal>
+
+        {/* ── Schedule History Modal ── */}
+        <Modal
+          animationType="fade"
+          transparent
+          visible={historyModalVisible}
+          onRequestClose={() => setHistoryModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.historyModalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Irrigation History</Text>
+                <TouchableOpacity onPress={() => setHistoryModalVisible(false)}>
+                  <FontAwesome name="times" size={24} color={colors.dark} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.historyModalSubtitle}>
+                All your scheduled irrigation dates and times are saved here.
+              </Text>
+              {historyLoading ? (
+                <View style={styles.historyLoadingState}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.historyLoadingText}>
+                    Loading history...
+                  </Text>
+                </View>
+              ) : historyGroups.length === 0 ? (
+                <Text style={styles.historyEmptyText}>
+                  No irrigation schedules recorded yet.
+                </Text>
+              ) : (
+                <ScrollView
+                  style={styles.historyScroll}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {historyGroups.map((group) => (
+                    <View
+                      key={`${group.year}-${group.month}-${group.day}`}
+                      style={styles.historyDateCard}
+                    >
+                      <View style={styles.historyDateHeader}>
+                        <FontAwesome
+                          name="calendar"
+                          size={14}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.historyDateText}>
+                          {MONTHS[group.month - 1]} {group.day}, {group.year}
+                        </Text>
+                      </View>
+                      {group.schedules.map((schedule) => (
+                        <View key={schedule.id} style={styles.historyTimeRow}>
+                          <FontAwesome
+                            name="clock-o"
+                            size={13}
+                            color={colors.grayText}
+                          />
+                          <Text
+                            style={[
+                              styles.historyTimeText,
+                              schedule.isPast && styles.historyTimeTextPast,
+                            ]}
+                          >
+                            {schedule.time}
+                          </Text>
+                          <View
+                            style={[
+                              styles.historyStatusBadge,
+                              schedule.isPast
+                                ? styles.historyStatusCompleted
+                                : styles.historyStatusUpcoming,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.historyStatusText,
+                                schedule.isPast
+                                  ? styles.historyStatusTextCompleted
+                                  : styles.historyStatusTextUpcoming,
+                              ]}
+                            >
+                              {schedule.isPast ? "Completed" : "Upcoming"}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* ── Farm Setup Required Modal ── */}
+        <Modal
+          animationType="fade"
+          transparent
+          visible={farmSetupModalVisible}
+          onRequestClose={() => setFarmSetupModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.farmSetupModalContent}>
+              <View style={styles.farmSetupIconContainer}>
+                <FontAwesome name="leaf" size={40} color={colors.primary} />
+              </View>
+              <Text style={styles.farmSetupTitle}>Farm Information Required</Text>
+              <Text style={styles.farmSetupMessage}>
+                Please set up your Farm Information first before irrigation
+                schedule and auto irrigation can work.
+              </Text>
+              <View style={styles.addScheduleModalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setFarmSetupModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={handleFarmSetupSet}
+                >
+                  <Text style={styles.addButtonText}>Set</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -2136,7 +2305,31 @@ const styles = StyleSheet.create({
     color: colors.dark,
     letterSpacing: 0.5,
   },
-  placeholder: { width: 32 },
+  historyHeaderButton: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewHistoryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.grayBorder,
+  },
+  viewHistoryButtonText: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.dark,
+  },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, gap: 14, paddingBottom: 100 },
 
@@ -2300,6 +2493,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  fabDisabled: {
+    backgroundColor: colors.grayText,
+    opacity: 0.55,
   },
 
   // Modals
@@ -2578,6 +2775,83 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     opacity: 0.9,
   },
+  historyModalContent: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: 24,
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "80%",
+  },
+  historyModalSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.grayText,
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  historyLoadingState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 32,
+    gap: 10,
+  },
+  historyLoadingText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.grayText,
+  },
+  historyEmptyText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.grayText,
+    textAlign: "center",
+    paddingVertical: 32,
+  },
+  historyScroll: { maxHeight: 420 },
+  historyDateCard: {
+    backgroundColor: colors.grayLight,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  historyDateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  historyDateText: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.dark,
+  },
+  historyTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+  },
+  historyTimeText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.dark,
+  },
+  historyTimeTextPast: { color: colors.grayText },
+  historyStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  historyStatusCompleted: { backgroundColor: "#E2E8F0" },
+  historyStatusUpcoming: { backgroundColor: colors.primaryLight },
+  historyStatusText: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+  },
+  historyStatusTextCompleted: { color: colors.grayText },
+  historyStatusTextUpcoming: { color: colors.primaryDark },
   infoValue: { fontFamily: fonts.semibold, fontSize: 16, color: colors.dark },
   noSchedulesText: {
     fontFamily: fonts.medium,
@@ -2585,6 +2859,38 @@ const styles = StyleSheet.create({
     color: colors.grayText,
     textAlign: "center",
     padding: 20,
+  },
+  farmSetupModalContent: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+    alignItems: "center",
+  },
+  farmSetupIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.primaryLight,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  farmSetupTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    color: colors.dark,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  farmSetupMessage: {
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: colors.grayText,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 8,
   },
   alarmModalContent: {
     backgroundColor: colors.white,

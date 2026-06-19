@@ -90,6 +90,9 @@ export default function SignupScreen() {
   const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const submittingRef = useRef(false);
+
+  const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
   const canSubmit = useMemo(() => {
     const phoneOk = PHONE_11_REGEX.test(phone);
@@ -155,7 +158,8 @@ export default function SignupScreen() {
   };
 
   const checkEmailExists = async (emailToCheck: string) => {
-    if (!emailToCheck || !emailToCheck.includes("@")) {
+    const normalized = normalizeEmail(emailToCheck);
+    if (!normalized || !normalized.includes("@")) {
       setEmailExists(false);
       return;
     }
@@ -165,10 +169,21 @@ export default function SignupScreen() {
       const { data, error } = await supabase
         .from("user_profiles")
         .select("email")
-        .eq("email", emailToCheck.trim())
+        .eq("email", normalized)
         .maybeSingle();
 
-      setEmailExists(!error && !!data);
+      if (!error && data) {
+        setEmailExists(true);
+        return;
+      }
+
+      const { data: looseMatch, error: looseError } = await supabase
+        .from("user_profiles")
+        .select("email")
+        .ilike("email", normalized)
+        .maybeSingle();
+
+      setEmailExists(!looseError && !!looseMatch);
     } catch (error) {
       console.error("Error checking email:", error);
       setEmailExists(false);
@@ -272,6 +287,8 @@ export default function SignupScreen() {
   }, []);
 
   const handleSignup = async () => {
+    if (submittingRef.current) return;
+
     // Validate all fields
     let hasErrors = false;
 
@@ -316,22 +333,6 @@ export default function SignupScreen() {
       hasErrors = true;
     }
 
-    // Re-check phone uniqueness on submit to avoid race with debounced check
-    if (!hasErrors && PHONE_11_REGEX.test(phone)) {
-      const { data: phoneRow, error: phoneLookupError } = await supabase
-        .from("user_profiles")
-        .select("phone_number")
-        .eq("phone_number", phone)
-        .maybeSingle();
-      if (!phoneLookupError && phoneRow) {
-        setPhoneExists(true);
-        setPhoneError(
-          "This phone number is already registered. Please use a different number.",
-        );
-        hasErrors = true;
-      }
-    }
-
     // Check if all password requirements are met
     const requirements = getPasswordRequirements(password);
     const allRequirementsMet = Object.values(requirements).every(
@@ -366,8 +367,53 @@ export default function SignupScreen() {
       return;
     }
 
+    submittingRef.current = true;
     setLoading(true);
+
+    const normalizedEmail = normalizeEmail(email);
+
     try {
+      const { data: emailRow, error: emailLookupError } = await supabase
+        .from("user_profiles")
+        .select("email")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+
+      if (!emailLookupError && emailRow) {
+        setEmailExists(true);
+        setEmailError(
+          "This email address is already registered. Please use a different email.",
+        );
+        return;
+      }
+
+      const { data: emailLooseRow, error: emailLooseError } = await supabase
+        .from("user_profiles")
+        .select("email")
+        .ilike("email", normalizedEmail)
+        .maybeSingle();
+
+      if (!emailLooseError && emailLooseRow) {
+        setEmailExists(true);
+        setEmailError(
+          "This email address is already registered. Please use a different email.",
+        );
+        return;
+      }
+
+      const { data: phoneRow, error: phoneLookupError } = await supabase
+        .from("user_profiles")
+        .select("phone_number")
+        .eq("phone_number", phone)
+        .maybeSingle();
+      if (!phoneLookupError && phoneRow) {
+        setPhoneExists(true);
+        setPhoneError(
+          "This phone number is already registered. Please use a different number.",
+        );
+        return;
+      }
+
       // Get device information
       const deviceId = Device.osInternalBuildId || Device.modelId || "unknown";
       const deviceModel = Device.modelName || Device.modelId || "unknown";
@@ -380,8 +426,8 @@ export default function SignupScreen() {
         .from("user_profiles")
         .insert({
           id: newId,
-          name,
-          email: email.trim(),
+          name: name.trim(),
+          email: normalizedEmail,
           phone_number: phone,
           password: hashedPassword,
           device_id: deviceId,
@@ -389,8 +435,31 @@ export default function SignupScreen() {
         });
 
       if (profileError) {
+        const isDuplicateEmail =
+          profileError.code === "23505" &&
+          profileError.message.includes("user_profiles_email_key");
+        const isDuplicatePhone =
+          profileError.code === "23505" &&
+          profileError.message.includes("phone");
+
+        if (isDuplicateEmail || isDuplicatePhone) {
+          Alert.alert(
+            "Account Already Exists",
+            isDuplicateEmail
+              ? "This email is already registered. Please sign in instead."
+              : "This phone number is already registered. Please sign in or use a different number.",
+            [
+              {
+                text: "Go to Sign In",
+                onPress: () => router.replace("/UserManagement/login"),
+              },
+              { text: "OK" },
+            ],
+          );
+          return;
+        }
+
         Alert.alert("Sign Up Failed", profileError.message);
-        setLoading(false);
         return;
       }
 
@@ -407,6 +476,7 @@ export default function SignupScreen() {
     } catch (error: any) {
       Alert.alert("Error", error.message || "An unexpected error occurred");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };

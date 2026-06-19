@@ -2,15 +2,70 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, View, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { fetchUserProfileByCredentials } from '@/lib/fetchUserProfileByCredentials';
+import bcrypt from '@/lib/bcrypt';
 import { isAdminRole } from '@/lib/isAdminRole';
-import { isFirstLaunch, isRememberMeEnabled, getSavedCredentials, getLoggedInEmail, clearSavedCredentials } from '@/lib/storage';
-import { scale, fontScale } from '@/lib/responsive';
-import * as Crypto from 'expo-crypto';
+import {
+  isFirstLaunch,
+  isRememberMeEnabled,
+  getSavedCredentials,
+  saveLoggedInEmail,
+  clearSavedCredentials,
+} from '@/lib/storage';
+import { supabase } from '@/lib/supabase';
+import { scale } from '@/lib/responsive';
 
 const colors = {
   brandGreen: '#3E9B4F',
 };
+
+async function verifySavedCredentials(
+  emailOrPhone: string,
+  password: string,
+): Promise<Record<string, unknown> | null> {
+  const trimmedInput = emailOrPhone.trim();
+  if (!trimmedInput || !password) return null;
+
+  const { data: emailProfile, error: emailError } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('email', trimmedInput)
+    .maybeSingle();
+
+  if (emailError) return null;
+
+  let userProfile: Record<string, unknown> | null = emailProfile
+    ? (emailProfile as Record<string, unknown>)
+    : null;
+
+  if (!userProfile) {
+    const { data: phoneProfile, error: phoneError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('phone_number', trimmedInput)
+      .maybeSingle();
+    if (phoneError || !phoneProfile) return null;
+    userProfile = phoneProfile as Record<string, unknown>;
+  }
+
+  const storedPassword =
+    typeof userProfile.password === 'string'
+      ? userProfile.password
+      : String(userProfile.password ?? '');
+  const isBcryptHash = /^\$2[aby]\$/.test(storedPassword);
+  let passwordMatches = false;
+
+  if (isBcryptHash) {
+    try {
+      passwordMatches = await bcrypt.compare(password, storedPassword);
+    } catch {
+      passwordMatches = password === storedPassword;
+    }
+  } else {
+    passwordMatches = password === storedPassword;
+  }
+
+  return passwordMatches ? userProfile : null;
+}
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -18,48 +73,36 @@ export default function SplashScreen() {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Fade-in animation for logo + loader
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
       useNativeDriver: true,
     }).start();
 
-    // Check navigation logic
     const checkNavigation = async () => {
       try {
-        // Check if it's first launch
         const firstLaunch = await isFirstLaunch();
-        
+
         if (firstLaunch) {
-          // First time: show welcome screen
           setTimeout(() => {
             router.replace('/UserManagement/welcomeScreen');
           }, 4000);
           return;
         }
 
-        // Not first launch: check if Remember Me is enabled
         const rememberMeEnabled = await isRememberMeEnabled();
-        
+
         if (rememberMeEnabled) {
-          // Try to auto-login with saved credentials
           const savedCredentials = await getSavedCredentials();
-          
+
           if (savedCredentials) {
             try {
-              // Verify credentials are still valid
-              const hashedPassword = await Crypto.digestStringAsync(
-                Crypto.CryptoDigestAlgorithm.SHA256,
-                savedCredentials.password
+              const userProfile = await verifySavedCredentials(
+                savedCredentials.email,
+                savedCredentials.password,
               );
 
-              const trimmedInput = savedCredentials.email.trim();
-
-              const { profile: userProfile, error } =
-                await fetchUserProfileByCredentials(trimmedInput, hashedPassword);
-
-              if (!error && userProfile && typeof userProfile.email === 'string') {
+              if (userProfile && typeof userProfile.email === 'string') {
                 if (isAdminRole(userProfile.role)) {
                   await clearSavedCredentials();
                   setTimeout(() => {
@@ -70,8 +113,9 @@ export default function SplashScreen() {
                   }, 4000);
                   return;
                 }
-                // Farmer (or non-admin): go to dashboard
+
                 const userEmail = userProfile.email;
+                await saveLoggedInEmail(userEmail);
                 setTimeout(() => {
                   router.replace({
                     pathname: '/UserManagement/dashboard',
@@ -79,13 +123,11 @@ export default function SplashScreen() {
                   });
                 }, 4000);
                 return;
-              } else {
-                // Credentials are invalid, clear them
-                await clearSavedCredentials();
               }
+
+              await clearSavedCredentials();
             } catch (error) {
               console.error('Error verifying saved credentials:', error);
-              // If verification fails, clear saved credentials and go to login
               try {
                 await clearSavedCredentials();
               } catch (clearError) {
@@ -95,13 +137,11 @@ export default function SplashScreen() {
           }
         }
 
-        // Default: go to login screen
         setTimeout(() => {
           router.replace('/UserManagement/login');
         }, 4000);
       } catch (error) {
         console.error('Error checking navigation:', error);
-        // On error, default to login screen
         setTimeout(() => {
           router.replace('/UserManagement/login');
         }, 4000);
@@ -147,4 +187,3 @@ const styles = StyleSheet.create({
     marginTop: scale(20),
   },
 });
-
