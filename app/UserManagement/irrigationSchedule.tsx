@@ -496,11 +496,7 @@ export default function IrrigationScheduleScreen() {
           // Match dashboard: humidity as integer %
           setHumidity(Math.round(raw));
         } else if (data.sensor_id === 3) {
-          const raw = Number(data.value);
-          // Match dashboard admin conversion: higher raw = drier (inverted ADC scale)
-          const percent = Math.round(((1023 - raw) / 1023) * 100);
-          const clamped = Math.min(100, Math.max(0, percent));
-          setSoilMoisture(clamped);
+          setSoilMoisture(Math.round(Number(data.value)));
         }
       });
     } catch (error) {
@@ -1105,10 +1101,9 @@ export default function IrrigationScheduleScreen() {
         return;
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("irrigation_scheduled_dates")
-        .insert(insertData)
-        .select();
+        .insert(insertData);
       if (error) {
         if (error.code === "42703" && error.message.includes("time")) {
           Alert.alert(
@@ -1122,43 +1117,6 @@ export default function IrrigationScheduleScreen() {
 
       await syncTimeScheduleTemplates(currentScheduleId, uniqueScheduleTimes);
 
-      const todayDate = new Date();
-      const todayDay = todayDate.getDate();
-      const todayMonth = todayDate.getMonth() + 1;
-      const todayYear = todayDate.getFullYear();
-      const addedToday = newScheduleDates.filter(
-        (day) =>
-          day === todayDay &&
-          currentMonth + 1 === todayMonth &&
-          currentYear === todayYear,
-      );
-      if (addedToday.length > 0) {
-        const todayDateKey = `${todayYear}-${todayMonth}-${todayDay}`;
-        const currentMap = new Map(dateSchedules);
-        if (!currentMap.has(todayDateKey))
-          currentMap.set(todayDateKey, {
-            day: todayDay,
-            month: todayMonth,
-            year: todayYear,
-            schedules: [],
-          });
-        const todaySchedule = currentMap.get(todayDateKey)!;
-        uniqueScheduleTimes.forEach((timeString) => {
-          const inserted = data?.find((d) => {
-            const dDate = new Date(d.scheduled_date);
-            return (
-              dDate.getDate() === todayDay &&
-              dDate.getMonth() + 1 === todayMonth &&
-              dDate.getFullYear() === todayYear &&
-              d.time === timeString
-            );
-          });
-          if (inserted)
-            todaySchedule.schedules.push({ id: inserted.id, time: timeString });
-        });
-        setDateSchedules(new Map(currentMap));
-        setTimeout(() => updateTodayStats(), 10);
-      }
       await fetchScheduledDates(
         currentScheduleId,
         false,
@@ -1166,11 +1124,21 @@ export default function IrrigationScheduleScreen() {
         currentYear,
       );
       invalidateTodayScheduleSlotsCache();
-      await ensureManualModeForSchedule();
+      try {
+        await ensureManualModeForSchedule();
+      } catch (modeError) {
+        console.warn(
+          "[irrigationSchedule] Manual mode sync after save failed:",
+          modeError,
+        );
+      }
+      const addedDateCount = newScheduleDates.length;
+      setNewScheduleDates([]);
+      setNewScheduleTimes([]);
       setAddScheduleModalVisible(false);
       Alert.alert(
         "Success",
-        `Schedule added for ${newScheduleDates.length} date(s)!`,
+        `Schedule added for ${addedDateCount} date(s)!`,
       );
     } catch (error) {
       console.error("Error adding schedule:", error);
@@ -1656,8 +1624,8 @@ export default function IrrigationScheduleScreen() {
           <SensorCard
             label="Soil Moisture"
             value={soilMoisture}
-            max={100}
-            unit="%"
+            max={1200}
+            unit=""
             trackColor={colors.grayBorder}
             fillColor="#10B981"
             icon="tint"

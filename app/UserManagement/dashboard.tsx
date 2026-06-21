@@ -174,10 +174,9 @@ function toYmdLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function getSoilSeverity(percent: number): string {
-  if (percent < 40) return "Dry";
-  if (percent <= 80) return "Optimal";
-  return "Wet";
+function getSoilSeverity(rawValue: number): string {
+  if (rawValue <= 400) return "Wet";
+  return "Dry";
 }
 
 function getHumiditySeverity(value: number): string {
@@ -505,9 +504,7 @@ export default function DashboardScreen() {
           .limit(1)
           .maybeSingle();
         if (soilData) {
-          const raw = Number(soilData.value);
-          const percent = Math.round(((1023 - raw) / 1023) * 100);
-          setSoilMoisturePercent(Math.min(100, Math.max(0, percent)));
+          setSoilMoisturePercent(Math.round(Number(soilData.value)));
         }
 
         const { data: tempData } = await supabase
@@ -566,10 +563,7 @@ export default function DashboardScreen() {
           };
 
           if (row.sensor_id === 3) {
-            const raw = Number(row.value);
-            const percent = Math.round(((1023 - raw) / 1023) * 100);
-            const clamped = Math.min(100, Math.max(0, percent));
-            setSoilMoisturePercent(clamped);
+            setSoilMoisturePercent(Math.round(Number(row.value)));
             setLastUpdated(row.timestamp);
           } else if (row.sensor_id === 1) {
             setTemperatureValue(Math.round(row.value * 10) / 10);
@@ -1634,9 +1628,7 @@ export default function DashboardScreen() {
             .limit(1)
             .maybeSingle();
           if (soilData) {
-            const raw = Number(soilData.value);
-            const percent = Math.round(((1023 - raw) / 1023) * 100);
-            setSoilMoisturePercent(Math.min(100, Math.max(0, percent)));
+            setSoilMoisturePercent(Math.round(Number(soilData.value)));
           }
 
           const { data: tempData } = await supabase
@@ -1748,33 +1740,26 @@ export default function DashboardScreen() {
   // "Standby — Wet" triggering too early at mid-range values.
   const irrigStatus = sensorLoading
     ? null
-    : soilMoisturePercent <= 25
+    : soilMoisturePercent <= 400
       ? {
-          label: "Irrigating — Critical",
-          chipStyle: styles.heroChipCritical,
-          textColor: "#DC2626",
+          label: "Standby — Wet",
+          chipStyle: styles.heroChipInfo,
+          textColor: "#2563EB",
           icon: "tint" as const,
         }
-      : soilMoisturePercent <= 40
+      : soilMoisturePercent <= 800
         ? {
-            label: "Irrigating — Low",
+            label: "Irrigating — Dry",
             chipStyle: styles.heroChipAlert,
             textColor: "#EA580C",
             icon: "tint" as const,
           }
-        : soilMoisturePercent < 81
-          ? {
-              label: "Standby",
-              chipStyle: styles.heroChipGood,
-              textColor: "#059669",
-              icon: "check-circle" as const,
-            }
-          : {
-              label: "Standby",
-              chipStyle: styles.heroChipInfo,
-              textColor: "#2563EB",
-              icon: "tint" as const,
-            };
+        : {
+            label: "Irrigating — Critical",
+            chipStyle: styles.heroChipCritical,
+            textColor: "#DC2626",
+            icon: "tint" as const,
+          };
 
   // ── Build 7-day forecast items ──
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -2051,11 +2036,11 @@ export default function DashboardScreen() {
               <View style={styles.gaugesRow}>
                 <CircularGauge
                   value={soilMoisturePercent}
-                  maxValue={100}
+                  maxValue={1200}
                   gradientColors={["#34D399", "#10B981"]}
                   label="Soil Moisture"
                   subLabel={getSoilSeverity(soilMoisturePercent)}
-                  unit="%"
+                  unit=""
                   icon={<FontAwesome name="globe" size={14} color="#22C55E" />}
                 />
                 <CircularGauge

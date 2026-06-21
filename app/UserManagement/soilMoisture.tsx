@@ -141,12 +141,13 @@ function LineChart({ data, color }: { data: number[]; color: string }) {
   );
 }
 
-function GaugeRing({ percent }: { percent: number }) {
+function GaugeRing({ value, max }: { value: number; max: number }) {
   const size = 110;
   const stroke = 10;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const dash = (percent / 100) * circumference;
+  const progress = Math.min(value / max, 1);
+  const dash = progress * circumference;
 
   return (
     <View style={styles.gaugeShell}>
@@ -173,7 +174,7 @@ function GaugeRing({ percent }: { percent: number }) {
         />
       </Svg>
       <View style={styles.gaugeCenter}>
-        <Text style={styles.gaugeValue}>{percent}%</Text>
+        <Text style={styles.gaugeValue}>{value}</Text>
         <Text style={styles.gaugeLabel}>Soil moisture</Text>
       </View>
     </View>
@@ -192,17 +193,9 @@ function formatPHTime(isoString: string): string {
   }).format(new Date(isoString));
 }
 
-// ✅ FIXED: matches admin conversion — higher raw ADC value = drier soil
-function rawToPercent(raw: number): number {
-  const percent = Math.round(((1023 - raw) / 1023) * 100);
-  return Math.min(100, Math.max(0, percent));
-}
-
-// ✅ FIXED: thresholds now match admin (40/80, not 60/80)
-function getStatus(percent: number): { label: string; color: string } {
-  if (percent < 40) return { label: "Dry", color: "#F97316" };
-  if (percent <= 80) return { label: "Optimal", color: "#22C55E" };
-  return { label: "Wet", color: "#3B82F6" };
+function getStatus(rawValue: number): { label: string; color: string } {
+  if (rawValue <= 400) return { label: "Wet", color: "#3B82F6" };
+  return { label: "Dry", color: "#F97316" };
 }
 
 export default function SoilMoistureScreen() {
@@ -232,8 +225,8 @@ export default function SoilMoistureScreen() {
 
       if (data && data.length > 0) {
         const reversed = [...data].reverse();
-        setTrendData(reversed.map((d) => rawToPercent(Number(d.value))));
-        setCurrentValue(rawToPercent(Number(data[0].value)));
+        setTrendData(reversed.map((d) => Math.round(Number(d.value))));
+        setCurrentValue(Math.round(Number(data[0].value)));
         setLastUpdated(data[0].timestamp);
       }
     } catch (error) {
@@ -298,13 +291,12 @@ export default function SoilMoistureScreen() {
               <View>
                 <Text style={styles.metricLabel}>Current</Text>
                 <Text style={styles.metricValue}>
-                  {currentValue !== null ? `${currentValue}%` : "--"}
+                  {currentValue !== null ? `${currentValue}` : "--"}
                 </Text>
               </View>
               <View>
-                {/* ✅ FIXED: updated to match admin optimal range */}
-                <Text style={styles.metricLabel}>Optimal range</Text>
-                <Text style={styles.metricValue}>40 – 80%</Text>
+                <Text style={styles.metricLabel}>Ranges</Text>
+                <Text style={styles.metricValue}>1–400 Wet · 401–1200 Dry</Text>
               </View>
             </View>
           </View>
@@ -314,7 +306,7 @@ export default function SoilMoistureScreen() {
               <View style={styles.areaHeader}>
                 <Text style={styles.areaName}>Latest Reading</Text>
               </View>
-              <GaugeRing percent={currentValue} />
+              <GaugeRing value={currentValue} max={1200} />
               <View style={styles.areaFooter}>
                 <Text style={styles.areaFootLabel}>Status</Text>
                 <Text style={[styles.areaFootValue, { color: status.color }]}>
