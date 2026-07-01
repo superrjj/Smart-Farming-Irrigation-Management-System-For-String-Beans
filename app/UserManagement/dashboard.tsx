@@ -26,7 +26,12 @@ import Svg, {
   LinearGradient as SvgLinearGradient,
 } from "react-native-svg";
 
+import {
+  FarmAdvisoryMessage,
+  getAdvisoryAccentColor,
+} from "@/components/FarmAdvisoryMessage";
 import { isAdminRole } from "@/lib/isAdminRole";
+import { isAdminRemarkDue } from "@/lib/notifications";
 import { clearAllStorage, getLoggedInEmail } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import { getWeatherData } from "../../lib/weatherConfig";
@@ -1440,6 +1445,7 @@ export default function DashboardScreen() {
               .limit(20);
             remarkItems = (remarkRows ?? [])
               .filter((row) => userDateKeys.has(String(row.date_key)))
+              .filter((row) => isAdminRemarkDue(String(row.date_key)))
               .map((row) => {
                 const id = `remark-${String(row.date_key)}`;
                 return {
@@ -2166,7 +2172,12 @@ export default function DashboardScreen() {
                   showsVerticalScrollIndicator
                   nestedScrollEnabled
                 >
-                  {notifications.map((n) => (
+                  {notifications.map((n) => {
+                    const accentColor =
+                      n.type === "admin_remark"
+                        ? colors.purple
+                        : getAdvisoryAccentColor(n.title, n.message);
+                    return (
                     <TouchableOpacity
                       key={n.id}
                       activeOpacity={0.8}
@@ -2183,6 +2194,7 @@ export default function DashboardScreen() {
                       style={[
                         styles.notifItem,
                         n.is_read ? styles.notifRead : styles.notifUnread,
+                        { borderLeftColor: accentColor },
                       ]}
                     >
                       <FontAwesome
@@ -2191,9 +2203,7 @@ export default function DashboardScreen() {
                         color={
                           n.is_read
                             ? "#6B7280"
-                            : n.type === "admin_remark"
-                              ? colors.purple
-                              : colors.brandGreen
+                            : accentColor
                         }
                       />
                       <View style={{ flex: 1 }}>
@@ -2205,7 +2215,8 @@ export default function DashboardScreen() {
                         ) : null}
                       </View>
                     </TouchableOpacity>
-                  ))}
+                    );
+                  })}
                 </ScrollView>
               )}
               {notifications.length > 0 && unreadCount > 0 && (
@@ -2233,9 +2244,16 @@ export default function DashboardScreen() {
               <Text style={styles.popupTitle}>
                 {selectedRecommendation?.title ?? "Recommendation"}
               </Text>
-              <Text style={styles.popupMessage}>
-                {selectedRecommendation?.message ?? ""}
-              </Text>
+              <ScrollView
+                style={styles.popupMessageScroll}
+                contentContainerStyle={styles.popupMessageScrollContent}
+                showsVerticalScrollIndicator
+              >
+                <FarmAdvisoryMessage
+                  message={selectedRecommendation?.message ?? ""}
+                  plainTextStyle={styles.popupMessage}
+                />
+              </ScrollView>
               <TouchableOpacity
                 style={styles.popupOkButton}
                 onPress={() => setSelectedRecommendation(null)}
@@ -2979,6 +2997,7 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 10,
     padding: 10,
+    borderLeftWidth: 4,
   },
   notifRead: { backgroundColor: "#F9FAFB" },
   notifUnread: { backgroundColor: "#ECFEFF" },
@@ -3028,6 +3047,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#111827",
     marginBottom: 8,
+  },
+  popupMessageScroll: {
+    maxHeight: 360,
+  },
+  popupMessageScrollContent: {
+    paddingBottom: 4,
   },
   popupMessage: {
     fontFamily: fonts.regular,

@@ -9,18 +9,22 @@ import {
   addNotificationReceivedHandler,
   addNotificationResponseHandler,
   getExpoPushToken,
+  philippinesCalendarCompare,
   scheduleAdminRemarkNotification,
+  syncTodayAdminRemarkNotifications,
 } from "@/lib/notifications";
 import { clearAllStorage, getLoggedInEmail } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/lib/toast";
 import { AdminAccessDeniedModal } from "@/components/admin-access-denied-modal";
+import { FarmAdvisoryMessage } from "@/components/FarmAdvisoryMessage";
 import { ToastHost } from "@/components/ToastHost";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   AppState,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -72,6 +76,9 @@ export default function UserManagementLayout() {
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
       appStateRef.current = next;
+      if (next === "active" && scheduleIdsRef.current.length > 0) {
+        void syncTodayAdminRemarkNotifications(scheduleIdsRef.current);
+      }
     });
     return () => sub.remove();
   }, []);
@@ -121,6 +128,7 @@ export default function UserManagementLayout() {
         return;
       }
       scheduleIdsRef.current = (data ?? []).map((row) => String(row.id));
+      void syncTodayAdminRemarkNotifications(scheduleIdsRef.current);
     };
 
     void loadScheduleIds();
@@ -268,11 +276,16 @@ export default function UserManagementLayout() {
       const body = row.text ?? "";
       if (!body) return;
 
-      // Always schedule a push so admin remarks behave like notification events
-      // even when the app is currently open.
+      const remarkDayCompare = philippinesCalendarCompare(
+        parsed.year,
+        parsed.month,
+        parsed.day,
+      );
+
+      // Schedule for the remark date (midnight PH). Do not alert early for future dates.
       void scheduleAdminRemarkNotification(body, row.date_key);
 
-      if (appStateRef.current === "active") {
+      if (remarkDayCompare === 0 && appStateRef.current === "active") {
         setPopup({ title, message: body });
       }
     };
@@ -312,6 +325,7 @@ export default function UserManagementLayout() {
           }
           scheduleIdsRef.current = (data ?? []).map((row) => String(row.id));
           invalidateTodayScheduleSlotsCache();
+          void syncTodayAdminRemarkNotifications(scheduleIdsRef.current);
         },
       )
       .subscribe();
@@ -435,7 +449,16 @@ export default function UserManagementLayout() {
             <Text style={styles.popupTitle}>
               {popup?.title ?? "Recommendation"}
             </Text>
-            <Text style={styles.popupMessage}>{popup?.message ?? ""}</Text>
+            <ScrollView
+              style={styles.popupMessageScroll}
+              contentContainerStyle={styles.popupMessageScrollContent}
+              showsVerticalScrollIndicator
+            >
+              <FarmAdvisoryMessage
+                message={popup?.message ?? ""}
+                plainTextStyle={styles.popupMessage}
+              />
+            </ScrollView>
             <TouchableOpacity
               style={styles.okButton}
               onPress={() => setPopup(null)}
@@ -496,6 +519,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
     marginBottom: 8,
+  },
+  popupMessageScroll: {
+    maxHeight: 360,
+  },
+  popupMessageScrollContent: {
+    paddingBottom: 4,
   },
   popupMessage: {
     fontSize: 14,

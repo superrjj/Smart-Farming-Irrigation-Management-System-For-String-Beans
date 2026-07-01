@@ -33,6 +33,9 @@ const fonts = {
   bold: "Poppins_700Bold",
 };
 
+const SOIL_RAW_MAX = 1200;
+const SOIL_WET_MAX = 450;
+
 function LineChart({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2) {
     return (
@@ -85,6 +88,14 @@ function LineChart({ data, color }: { data: number[]; color: string }) {
               pointRadius: 0,
               tension: 0.35,
               fill: false
+            }, {
+              data: ${JSON.stringify(data.map(() => SOIL_WET_MAX))},
+              borderColor: 'rgba(59,130,246,0.55)',
+              borderWidth: 1.5,
+              borderDash: [6, 4],
+              pointRadius: 0,
+              tension: 0,
+              fill: false
             }]
           },
           options: {
@@ -94,12 +105,12 @@ function LineChart({ data, color }: { data: number[]; color: string }) {
             scales: {
               y: {
                 min: 0,
-                max: 100,
+                max: ${SOIL_RAW_MAX},
                 ticks: {
-                  stepSize: 20,
+                  stepSize: 200,
                   color: '#64748B',
                   font: { size: 11 },
-                  callback: function(v) { return v + '%'; }
+                  callback: function(v) { return v; }
                 },
                 grid: {
                   color: 'rgba(100,116,139,0.2)',
@@ -194,7 +205,7 @@ function formatPHTime(isoString: string): string {
 }
 
 function getStatus(rawValue: number): { label: string; color: string } {
-  if (rawValue <= 400) return { label: "Wet", color: "#3B82F6" };
+  if (rawValue <= SOIL_WET_MAX) return { label: "Wet", color: "#3B82F6" };
   return { label: "Dry", color: "#F97316" };
 }
 
@@ -287,6 +298,20 @@ export default function SoilMoistureScreen() {
             ) : (
               <Text style={styles.noDataText}>No trend data available</Text>
             )}
+            <View style={styles.chartLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, styles.legendDotWet]} />
+                <Text style={styles.legendText}>Wet (1–450)</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, styles.legendDotDry]} />
+                <Text style={styles.legendText}>Dry (451–1200)</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendLine, styles.legendThresholdLine]} />
+                <Text style={styles.legendText}>Threshold (450)</Text>
+              </View>
+            </View>
             <View style={styles.metricsRow}>
               <View>
                 <Text style={styles.metricLabel}>Current</Text>
@@ -296,7 +321,7 @@ export default function SoilMoistureScreen() {
               </View>
               <View>
                 <Text style={styles.metricLabel}>Ranges</Text>
-                <Text style={styles.metricValue}>1–400 Wet · 401–1200 Dry</Text>
+                <Text style={styles.metricValue}>1–450 Wet · 451–1200 Dry</Text>
               </View>
             </View>
           </View>
@@ -306,7 +331,7 @@ export default function SoilMoistureScreen() {
               <View style={styles.areaHeader}>
                 <Text style={styles.areaName}>Latest Reading</Text>
               </View>
-              <GaugeRing value={currentValue} max={1200} />
+              <GaugeRing value={currentValue} max={SOIL_RAW_MAX} />
               <View style={styles.areaFooter}>
                 <Text style={styles.areaFootLabel}>Status</Text>
                 <Text style={[styles.areaFootValue, { color: status.color }]}>
@@ -383,6 +408,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
     borderRadius: 12,
     padding: 8,
+  },
+  chartLegend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 4,
+  },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendDotWet: { backgroundColor: "#3B82F6" },
+  legendDotDry: { backgroundColor: "#F97316" },
+  legendLine: { width: 16, height: 2, borderRadius: 1 },
+  legendThresholdLine: { backgroundColor: "rgba(59,130,246,0.55)" },
+  legendText: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.subText,
   },
   metricsRow: { flexDirection: "row", justifyContent: "space-between" },
   metricLabel: {

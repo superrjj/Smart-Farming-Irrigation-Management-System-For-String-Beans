@@ -31,6 +31,27 @@ function parseDateKey(dateKey: string): { year: number; month: number; day: numb
   return { year, month, day };
 }
 
+function isFutureRemarkDate(parsed: {
+  year: number;
+  month: number;
+  day: number;
+}): boolean {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date());
+  const n = (t: string) =>
+    parseInt(parts.find((p) => p.type === t)?.value ?? "0", 10);
+  const todayYear = n("year");
+  const todayMonth = n("month");
+  const todayDay = n("day");
+  if (parsed.year !== todayYear) return parsed.year > todayYear;
+  if (parsed.month !== todayMonth) return parsed.month > todayMonth;
+  return parsed.day > todayDay;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -67,6 +88,21 @@ Deno.serve(async (req) => {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  if (isFutureRemarkDate(parsed)) {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        sent: 0,
+        deferred: true,
+        message: "Remark push deferred until scheduled date (PH time).",
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();

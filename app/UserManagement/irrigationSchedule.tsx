@@ -306,6 +306,29 @@ export default function IrrigationScheduleScreen() {
     typeof setTimeout
   > | null>(null);
   const scheduleFetchSeqRef = useRef(0);
+  /** All irrigation_schedules.id rows for the logged-in farmer (includes past schedules). */
+  const userScheduleIdsRef = useRef<string[]>([]);
+
+  const loadFarmerScheduleIds = async (forUserId: string): Promise<string[]> => {
+    const { data, error } = await supabase
+      .from("irrigation_schedules")
+      .select("id")
+      .eq("user_id", forUserId);
+    if (error) throw error;
+    const ids = (data ?? []).map((row) => String(row.id));
+    userScheduleIdsRef.current = ids;
+    return ids;
+  };
+
+  const resolveScheduleIdsForFetch = (
+    primaryScheduleId?: string | null,
+  ): string[] => {
+    if (userScheduleIdsRef.current.length > 0) {
+      return userScheduleIdsRef.current;
+    }
+    if (primaryScheduleId) return [primaryScheduleId];
+    return [];
+  };
 
   const [soilMoisture, setSoilMoisture] = useState(0);
   const [temperature, setTemperature] = useState(0);
@@ -408,13 +431,13 @@ export default function IrrigationScheduleScreen() {
   );
 
   const fetchAdminRemarks = async () => {
-    if (!currentScheduleId) return;
+    const scheduleIds = resolveScheduleIdsForFetch(currentScheduleId);
+    if (scheduleIds.length === 0) return;
     try {
-      // 1. Get all date_keys belonging to the current user's schedule
       const { data: userDates, error: datesError } = await supabase
         .from("irrigation_scheduled_dates")
         .select("day, month, year")
-        .eq("schedule_id", currentScheduleId);
+        .in("schedule_id", scheduleIds);
 
       if (datesError) throw datesError;
 
@@ -629,9 +652,24 @@ export default function IrrigationScheduleScreen() {
           event: "*",
           schema: "public",
           table: "irrigation_scheduled_dates",
-          filter: `schedule_id=eq.${currentScheduleId}`,
         },
-        refreshScheduleState,
+        (payload) => {
+          const row = (payload.new ?? payload.old) as {
+            schedule_id?: string;
+          } | null;
+          const changedScheduleId = row?.schedule_id
+            ? String(row.schedule_id)
+            : null;
+          const farmerIds = userScheduleIdsRef.current;
+          if (
+            changedScheduleId &&
+            farmerIds.length > 0 &&
+            !farmerIds.includes(changedScheduleId)
+          ) {
+            return;
+          }
+          refreshScheduleState();
+        },
       )
       .on(
         "postgres_changes",
@@ -649,9 +687,11 @@ export default function IrrigationScheduleScreen() {
           event: "*",
           schema: "public",
           table: "irrigation_schedules",
-          filter: `id=eq.${currentScheduleId}`,
+          filter: `user_id=eq.${userId}`,
         },
-        refreshScheduleState,
+        () => {
+          void loadFarmerScheduleIds(userId).then(() => refreshScheduleState());
+        },
       )
       .subscribe();
 
@@ -722,6 +762,7 @@ export default function IrrigationScheduleScreen() {
         scheduleId = newSchedule.id;
       }
       setCurrentScheduleId(scheduleId);
+      await loadFarmerScheduleIds(userId);
       await fetchTimeSchedules(scheduleId);
       await fetchScheduledDates(scheduleId, true);
     } catch {
@@ -791,6 +832,9 @@ export default function IrrigationScheduleScreen() {
     viewedMonth = currentMonth,
     viewedYear = currentYear,
   ) => {
+    const scheduleIds = resolveScheduleIdsForFetch(scheduleId);
+    if (scheduleIds.length === 0) return;
+
     const fetchSeq = ++scheduleFetchSeqRef.current;
     try {
       if (showLoading) setLoading(true);
@@ -804,7 +848,7 @@ export default function IrrigationScheduleScreen() {
       const { data, error } = await supabase
         .from("irrigation_scheduled_dates")
         .select("id, day, month, year, time")
-        .eq("schedule_id", scheduleId)
+        .in("schedule_id", scheduleIds)
         .eq("month", viewedMonth + 1)
         .eq("year", viewedYear)
         .order("day, time");
@@ -816,7 +860,7 @@ export default function IrrigationScheduleScreen() {
           const { data: d2, error: e2 } = await supabase
             .from("irrigation_scheduled_dates")
             .select("id, day, month, year")
-            .eq("schedule_id", scheduleId)
+            .in("schedule_id", scheduleIds)
             .eq("month", viewedMonth + 1)
             .eq("year", viewedYear)
             .order("day");
@@ -879,7 +923,7 @@ export default function IrrigationScheduleScreen() {
         const { data: todayData, error: todayError } = await supabase
           .from("irrigation_scheduled_dates")
           .select("id, day, month, year, time")
-          .eq("schedule_id", scheduleId)
+          .in("schedule_id", scheduleIds)
           .eq("month", todayMonth)
           .eq("year", todayYear)
           .eq("day", todayDay)
@@ -1375,7 +1419,8 @@ export default function IrrigationScheduleScreen() {
   };
 
   const openScheduleHistory = async () => {
-    if (!currentScheduleId) {
+    const scheduleIds = resolveScheduleIdsForFetch(currentScheduleId);
+    if (scheduleIds.length === 0) {
       Alert.alert(
         "No Schedule",
         "Your irrigation schedule is not ready yet. Please try again in a moment.",
@@ -1388,7 +1433,7 @@ export default function IrrigationScheduleScreen() {
       const { data, error } = await supabase
         .from("irrigation_scheduled_dates")
         .select("id, day, month, year, time")
-        .eq("schedule_id", currentScheduleId)
+        .in("schedule_id", scheduleIds)
         .order("year", { ascending: false })
         .order("month", { ascending: false })
         .order("day", { ascending: false })

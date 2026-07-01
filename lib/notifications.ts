@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+import { supabase } from "@/lib/supabase";
+
 // Store notification response handler and subscription
 type NotificationResponse = {
   notification: {
@@ -245,45 +247,6 @@ export async function getExpoPushToken(): Promise<string | null> {
   }
 }
 
-export async function scheduleAdminRemarkNotification(
-  text: string,
-  dateKey?: string | null,
-): Promise<string | null> {
-  const body = text.trim();
-  if (!body) return null;
-
-  try {
-    const granted = await requestNotificationPermissions();
-    if (!granted) return null;
-
-    const Notifications = await ensureNotificationHandler();
-    if (!Notifications) return null;
-
-    return await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "Admin Remark",
-        body,
-        sound: true,
-        ...(Platform.OS === "android" && {
-          priority: Notifications.AndroidNotificationPriority.HIGH,
-          channelId: "irrigation-reminders",
-        }),
-        data: {
-          type: "admin_remark",
-          date_key: dateKey ?? null,
-        },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 1,
-      },
-    });
-  } catch (error) {
-    console.error("Error scheduling admin remark notification:", error);
-    return null;
-  }
-}
-
 /** Philippines (PHT): UTC+8, no DST — irrigation times are interpreted as Manila civil time. */
 const PHILIPPINES_OFFSET = "+08:00";
 
@@ -346,6 +309,137 @@ export function philippinesCalendarCompare(
   if (year !== t.year) return year - t.year;
   if (month !== t.month) return month - t.month;
   return day - t.day;
+}
+
+export function parseRemarkDateKey(
+  dateKey?: string | null,
+): { year: number; month: number; day: number } | null {
+  if (!dateKey) return null;
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+/** True when the remark's calendar date is today or earlier in Asia/Manila. */
+export function isAdminRemarkDue(dateKey?: string | null): boolean {
+  const parsed = parseRemarkDateKey(dateKey);
+  if (!parsed) return false;
+  return philippinesCalendarCompare(parsed.year, parsed.month, parsed.day) <= 0;
+}
+
+function getPhilippinesDayStart(
+  year: number,
+  month: number,
+  day: number,
+): Date {
+  return new Date(
+    `${year}-${pad2(month)}-${pad2(day)}T00:00:00${PHILIPPINES_OFFSET}`,
+  );
+}
+
+export async function scheduleAdminRemarkNotification(
+  text: string,
+  dateKey?: string | null,
+): Promise<string | null> {
+  const body = text.trim();
+  if (!body) return null;
+
+  try {
+    const granted = await requestNotificationPermissions();
+    if (!granted) return null;
+
+    const Notifications = await ensureNotificationHandler();
+    if (!Notifications) return null;
+
+    const parsed = parseRemarkDateKey(dateKey);
+    const now = new Date();
+    let trigger:
+      | { type: typeof Notifications.SchedulableTriggerInputTypes.DATE; date: Date }
+      | {
+          type: typeof Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL;
+          seconds: number;
+        };
+
+    if (parsed) {
+      const remarkDayStart = getPhilippinesDayStart(
+        parsed.year,
+        parsed.month,
+        parsed.day,
+      );
+      if (remarkDayStart.getTime() > now.getTime()) {
+        trigger = {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: remarkDayStart,
+        };
+      } else {
+        trigger = {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+        };
+      }
+    } else {
+      trigger = {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 1,
+      };
+    }
+
+    return await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Admin Remark",
+        body,
+        sound: true,
+        ...(Platform.OS === "android" && {
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+          channelId: "irrigation-reminders",
+        }),
+        data: {
+          type: "admin_remark",
+          date_key: dateKey ?? null,
+        },
+      },
+      trigger,
+    });
+  } catch (error) {
+    console.error("Error scheduling admin remark notification:", error);
+    return null;
+  }
+}
+
+/** Deliver today's admin remark if the farmer has a schedule on that date. */
+export async function syncTodayAdminRemarkNotifications(
+  scheduleIds: string[],
+): Promise<void> {
+  if (scheduleIds.length === 0) return;
+
+  const phToday = getPhilippinesTodayYmd();
+  const todayKey = `${phToday.year}-${phToday.month}-${phToday.day}`;
+
+  const { data: scheduledDate, error: dateError } = await supabase
+    .from("irrigation_scheduled_dates")
+    .select("id")
+    .in("schedule_id", scheduleIds)
+    .eq("year", phToday.year)
+    .eq("month", phToday.month)
+    .eq("day", phToday.day)
+    .limit(1);
+
+  if (dateError || !scheduledDate?.length) return;
+
+  const { data: remark, error: remarkError } = await supabase
+    .from("irrigation_remarks")
+    .select("text")
+    .eq("date_key", todayKey)
+    .maybeSingle();
+
+  if (remarkError || !remark?.text) return;
+
+  await scheduleAdminRemarkNotification(String(remark.text), todayKey);
 }
 
 /**
